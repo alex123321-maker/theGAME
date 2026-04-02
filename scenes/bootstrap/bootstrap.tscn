@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/bootstrap/bootstrap.gd" id="1_bootstrap"]
+[ext_resource type="PackedScene" path="res://scenes/map_view/map_view.tscn" id="2_map_view"]
+
+[node name="Bootstrap" type="Node"]
+script = ExtResource("1_bootstrap")
+
+[node name="MapView" parent="." instance=ExtResource("2_map_view")]

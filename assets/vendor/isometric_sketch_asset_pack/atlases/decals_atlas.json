@@ -1,0 +1,73 @@
+{
+  "cell_size": [
+    128,
+    64
+  ],
+  "columns": 2,
+  "items": [
+    {
+      "name": "decal_dirt_01",
+      "path": "decals/decal_dirt_01.png",
+      "atlas_rect": [
+        0,
+        0,
+        128,
+        64
+      ],
+      "content_rect": [
+        0,
+        0,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "decal_tracks_01",
+      "path": "decals/decal_tracks_01.png",
+      "atlas_rect": [
+        128,
+        0,
+        128,
+        64
+      ],
+      "content_rect": [
+        128,
+        0,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "decal_cracks_01",
+      "path": "decals/decal_cracks_01.png",
+      "atlas_rect": [
+        0,
+        64,
+        128,
+        64
+      ],
+      "content_rect": [
+        0,
+        64,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "decal_footprints_01",
+      "path": "decals/decal_footprints_01.png",
+      "atlas_rect": [
+        128,
+        64,
+        128,
+        64
+      ],
+      "content_rect": [
+        128,
+        64,
+        128,
+        64
+      ]
+    }
+  ]
+}

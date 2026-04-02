@@ -1,0 +1,521 @@
+{
+  "pack_name": "isometric_sketch_village_world_pack",
+  "tile_size": {
+    "terrain": [
+      128,
+      64
+    ],
+    "props": [
+      128,
+      128
+    ]
+  },
+  "files": [
+    {
+      "path": "terrain/base/ground_01.png",
+      "category": "terrain_base",
+      "tags": [
+        "ground"
+      ]
+    },
+    {
+      "path": "terrain/base/ground_02.png",
+      "category": "terrain_base",
+      "tags": [
+        "ground"
+      ]
+    },
+    {
+      "path": "terrain/base/ground_03.png",
+      "category": "terrain_base",
+      "tags": [
+        "ground"
+      ]
+    },
+    {
+      "path": "terrain/base/ground_04.png",
+      "category": "terrain_base",
+      "tags": [
+        "ground"
+      ]
+    },
+    {
+      "path": "terrain/base/ground_05.png",
+      "category": "terrain_base",
+      "tags": [
+        "ground"
+      ]
+    },
+    {
+      "path": "terrain/base/ground_06.png",
+      "category": "terrain_base",
+      "tags": [
+        "ground"
+      ]
+    },
+    {
+      "path": "terrain/base/clearing_01.png",
+      "category": "terrain_base",
+      "tags": [
+        "clearing"
+      ]
+    },
+    {
+      "path": "terrain/base/clearing_02.png",
+      "category": "terrain_base",
+      "tags": [
+        "clearing"
+      ]
+    },
+    {
+      "path": "terrain/base/clearing_03.png",
+      "category": "terrain_base",
+      "tags": [
+        "clearing"
+      ]
+    },
+    {
+      "path": "terrain/base/clearing_04.png",
+      "category": "terrain_base",
+      "tags": [
+        "clearing"
+      ]
+    },
+    {
+      "path": "terrain/base/road_01.png",
+      "category": "terrain_base",
+      "tags": [
+        "road"
+      ]
+    },
+    {
+      "path": "terrain/base/road_02.png",
+      "category": "terrain_base",
+      "tags": [
+        "road"
+      ]
+    },
+    {
+      "path": "terrain/base/road_03.png",
+      "category": "terrain_base",
+      "tags": [
+        "road"
+      ]
+    },
+    {
+      "path": "terrain/base/road_04.png",
+      "category": "terrain_base",
+      "tags": [
+        "road"
+      ]
+    },
+    {
+      "path": "terrain/base/road_05.png",
+      "category": "terrain_base",
+      "tags": [
+        "road"
+      ]
+    },
+    {
+      "path": "terrain/base/road_06.png",
+      "category": "terrain_base",
+      "tags": [
+        "road"
+      ]
+    },
+    {
+      "path": "terrain/edges/forest_edge_north.png",
+      "category": "terrain_edge",
+      "tags": [
+        "forest_edge",
+        "north"
+      ]
+    },
+    {
+      "path": "terrain/edges/forest_edge_east.png",
+      "category": "terrain_edge",
+      "tags": [
+        "forest_edge",
+        "east"
+      ]
+    },
+    {
+      "path": "terrain/edges/forest_edge_south.png",
+      "category": "terrain_edge",
+      "tags": [
+        "forest_edge",
+        "south"
+      ]
+    },
+    {
+      "path": "terrain/edges/forest_edge_west.png",
+      "category": "terrain_edge",
+      "tags": [
+        "forest_edge",
+        "west"
+      ]
+    },
+    {
+      "path": "terrain/edges/rock_edge_north.png",
+      "category": "terrain_edge",
+      "tags": [
+        "rock_edge",
+        "north"
+      ]
+    },
+    {
+      "path": "terrain/edges/rock_edge_east.png",
+      "category": "terrain_edge",
+      "tags": [
+        "rock_edge",
+        "east"
+      ]
+    },
+    {
+      "path": "terrain/edges/rock_edge_south.png",
+      "category": "terrain_edge",
+      "tags": [
+        "rock_edge",
+        "south"
+      ]
+    },
+    {
+      "path": "terrain/edges/rock_edge_west.png",
+      "category": "terrain_edge",
+      "tags": [
+        "rock_edge",
+        "west"
+      ]
+    },
+    {
+      "path": "terrain/edges/water_edge_north.png",
+      "category": "terrain_edge",
+      "tags": [
+        "water_edge",
+        "north"
+      ]
+    },
+    {
+      "path": "terrain/edges/water_edge_east.png",
+      "category": "terrain_edge",
+      "tags": [
+        "water_edge",
+        "east"
+      ]
+    },
+    {
+      "path": "terrain/edges/water_edge_south.png",
+      "category": "terrain_edge",
+      "tags": [
+        "water_edge",
+        "south"
+      ]
+    },
+    {
+      "path": "terrain/edges/water_edge_west.png",
+      "category": "terrain_edge",
+      "tags": [
+        "water_edge",
+        "west"
+      ]
+    },
+    {
+      "path": "terrain/edges/ravine_edge_north.png",
+      "category": "terrain_edge",
+      "tags": [
+        "ravine_edge",
+        "north"
+      ]
+    },
+    {
+      "path": "terrain/edges/ravine_edge_east.png",
+      "category": "terrain_edge",
+      "tags": [
+        "ravine_edge",
+        "east"
+      ]
+    },
+    {
+      "path": "terrain/edges/ravine_edge_south.png",
+      "category": "terrain_edge",
+      "tags": [
+        "ravine_edge",
+        "south"
+      ]
+    },
+    {
+      "path": "terrain/edges/ravine_edge_west.png",
+      "category": "terrain_edge",
+      "tags": [
+        "ravine_edge",
+        "west"
+      ]
+    },
+    {
+      "path": "terrain/transitions/road_to_ground_01.png",
+      "category": "terrain_transition",
+      "tags": [
+        "road_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/road_to_ground_02.png",
+      "category": "terrain_transition",
+      "tags": [
+        "road_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/road_to_ground_03.png",
+      "category": "terrain_transition",
+      "tags": [
+        "road_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/road_to_ground_04.png",
+      "category": "terrain_transition",
+      "tags": [
+        "road_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/clearing_to_ground_01.png",
+      "category": "terrain_transition",
+      "tags": [
+        "clearing_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/clearing_to_ground_02.png",
+      "category": "terrain_transition",
+      "tags": [
+        "clearing_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/clearing_to_ground_03.png",
+      "category": "terrain_transition",
+      "tags": [
+        "clearing_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/clearing_to_ground_04.png",
+      "category": "terrain_transition",
+      "tags": [
+        "clearing_to_ground"
+      ]
+    },
+    {
+      "path": "terrain/transitions/obstacle_transition_01.png",
+      "category": "terrain_transition",
+      "tags": [
+        "obstacle_transition"
+      ]
+    },
+    {
+      "path": "terrain/transitions/obstacle_transition_02.png",
+      "category": "terrain_transition",
+      "tags": [
+        "obstacle_transition"
+      ]
+    },
+    {
+      "path": "terrain/transitions/obstacle_transition_03.png",
+      "category": "terrain_transition",
+      "tags": [
+        "obstacle_transition"
+      ]
+    },
+    {
+      "path": "terrain/transitions/obstacle_transition_04.png",
+      "category": "terrain_transition",
+      "tags": [
+        "obstacle_transition"
+      ]
+    },
+    {
+      "path": "props/boulder_01.png",
+      "category": "prop",
+      "tags": [
+        "boulder"
+      ]
+    },
+    {
+      "path": "props/boulder_02.png",
+      "category": "prop",
+      "tags": [
+        "boulder"
+      ]
+    },
+    {
+      "path": "props/boulder_03.png",
+      "category": "prop",
+      "tags": [
+        "boulder"
+      ]
+    },
+    {
+      "path": "props/stump_01.png",
+      "category": "prop",
+      "tags": [
+        "stump"
+      ]
+    },
+    {
+      "path": "props/stump_02.png",
+      "category": "prop",
+      "tags": [
+        "stump"
+      ]
+    },
+    {
+      "path": "props/dead_tree_01.png",
+      "category": "prop",
+      "tags": [
+        "dead"
+      ]
+    },
+    {
+      "path": "props/dead_tree_02.png",
+      "category": "prop",
+      "tags": [
+        "dead"
+      ]
+    },
+    {
+      "path": "props/ruins_fragment_01.png",
+      "category": "prop",
+      "tags": [
+        "ruins"
+      ]
+    },
+    {
+      "path": "props/ruins_fragment_02.png",
+      "category": "prop",
+      "tags": [
+        "ruins"
+      ]
+    },
+    {
+      "path": "props/ruins_fragment_03.png",
+      "category": "prop",
+      "tags": [
+        "ruins"
+      ]
+    },
+    {
+      "path": "props/broken_fence_01.png",
+      "category": "prop",
+      "tags": [
+        "broken"
+      ]
+    },
+    {
+      "path": "props/broken_fence_02.png",
+      "category": "prop",
+      "tags": [
+        "broken"
+      ]
+    },
+    {
+      "path": "props/cart_fragment_01.png",
+      "category": "prop",
+      "tags": [
+        "cart"
+      ]
+    },
+    {
+      "path": "props/cart_fragment_02.png",
+      "category": "prop",
+      "tags": [
+        "cart"
+      ]
+    },
+    {
+      "path": "props/log_pile_01.png",
+      "category": "prop",
+      "tags": [
+        "log"
+      ]
+    },
+    {
+      "path": "props/log_pile_02.png",
+      "category": "prop",
+      "tags": [
+        "log"
+      ]
+    },
+    {
+      "path": "overlays/entry_marker.png",
+      "category": "overlay",
+      "tags": [
+        "entry_marker"
+      ]
+    },
+    {
+      "path": "overlays/buildable_mask.png",
+      "category": "overlay",
+      "tags": [
+        "buildable_mask"
+      ]
+    },
+    {
+      "path": "overlays/threat_heat.png",
+      "category": "overlay",
+      "tags": [
+        "threat_heat"
+      ]
+    },
+    {
+      "path": "overlays/height_tint.png",
+      "category": "overlay",
+      "tags": [
+        "height_tint"
+      ]
+    },
+    {
+      "path": "decals/decal_dirt_01.png",
+      "category": "decal",
+      "tags": [
+        "dirt"
+      ]
+    },
+    {
+      "path": "decals/decal_tracks_01.png",
+      "category": "decal",
+      "tags": [
+        "tracks"
+      ]
+    },
+    {
+      "path": "decals/decal_cracks_01.png",
+      "category": "decal",
+      "tags": [
+        "cracks"
+      ]
+    },
+    {
+      "path": "decals/decal_footprints_01.png",
+      "category": "decal",
+      "tags": [
+        "footprints"
+      ]
+    },
+    {
+      "path": "shadows/shadow_mask_medium.png",
+      "category": "shadow",
+      "tags": [
+        "shadow_mask"
+      ]
+    },
+    {
+      "path": "shadows/shadow_mask_large.png",
+      "category": "shadow",
+      "tags": [
+        "shadow_mask"
+      ]
+    }
+  ]
+}

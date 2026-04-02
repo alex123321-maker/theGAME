@@ -1,0 +1,185 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/debug_runtime_panel.gd" id="1_panel_script"]
+
+[node name="DebugRuntimePanel" type="MarginContainer"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 760.0
+offset_bottom = 380.0
+script = ExtResource("1_panel_script")
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 2
+
+[node name="Root" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+
+[node name="Header" type="HBoxContainer" parent="Panel/Root"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Panel/Root/Header"]
+layout_mode = 2
+text = "Runtime Regeneration"
+
+[node name="CollapseButton" type="Button" parent="Panel/Root/Header" unique_name_in_owner=true]
+layout_mode = 2
+text = "Collapse"
+
+[node name="Body" type="VBoxContainer" parent="Panel/Root" unique_name_in_owner=true]
+layout_mode = 2
+
+[node name="SeedRow" type="HBoxContainer" parent="Panel/Root/Body"]
+layout_mode = 2
+
+[node name="SeedLabel" type="Label" parent="Panel/Root/Body/SeedRow"]
+layout_mode = 2
+text = "Seed"
+
+[node name="SeedInput" type="LineEdit" parent="Panel/Root/Body/SeedRow" unique_name_in_owner=true]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "101"
+
+[node name="ApplySeedButton" type="Button" parent="Panel/Root/Body/SeedRow" unique_name_in_owner=true]
+layout_mode = 2
+text = "Apply Seed"
+
+[node name="LayoutRow" type="HBoxContainer" parent="Panel/Root/Body"]
+layout_mode = 2
+
+[node name="EntryCountLabel" type="Label" parent="Panel/Root/Body/LayoutRow"]
+layout_mode = 2
+text = "Roads"
+
+[node name="EntryCountInput" type="LineEdit" parent="Panel/Root/Body/LayoutRow" unique_name_in_owner=true]
+layout_mode = 2
+custom_minimum_size = Vector2(80, 0)
+text = "3"
+
+[node name="VillageTileCountLabel" type="Label" parent="Panel/Root/Body/LayoutRow"]
+layout_mode = 2
+text = "Village Tiles"
+
+[node name="VillageTileCountInput" type="LineEdit" parent="Panel/Root/Body/LayoutRow" unique_name_in_owner=true]
+layout_mode = 2
+custom_minimum_size = Vector2(100, 0)
+text = "420"
+
+[node name="ActionRowA" type="HBoxContainer" parent="Panel/Root/Body"]
+layout_mode = 2
+
+[node name="RegenerateButton" type="Button" parent="Panel/Root/Body/ActionRowA" unique_name_in_owner=true]
+layout_mode = 2
+text = "Regenerate Current"
+
+[node name="RandomizeButton" type="Button" parent="Panel/Root/Body/ActionRowA" unique_name_in_owner=true]
+layout_mode = 2
+text = "Randomize Seed"
+
+[node name="PrevSeedButton" type="Button" parent="Panel/Root/Body/ActionRowA" unique_name_in_owner=true]
+layout_mode = 2
+text = "Prev Seed"
+
+[node name="NextSeedButton" type="Button" parent="Panel/Root/Body/ActionRowA" unique_name_in_owner=true]
+layout_mode = 2
+text = "Next Seed"
+
+[node name="ActionRowB" type="HBoxContainer" parent="Panel/Root/Body"]
+layout_mode = 2
+
+[node name="ExportJsonButton" type="Button" parent="Panel/Root/Body/ActionRowB" unique_name_in_owner=true]
+layout_mode = 2
+text = "Export JSON"
+
+[node name="ScreenshotButton" type="Button" parent="Panel/Root/Body/ActionRowB" unique_name_in_owner=true]
+layout_mode = 2
+text = "Screenshot"
+
+[node name="LogButton" type="Button" parent="Panel/Root/Body/ActionRowB" unique_name_in_owner=true]
+layout_mode = 2
+text = "Log"
+
+[node name="ActionRowC" type="HBoxContainer" parent="Panel/Root/Body"]
+layout_mode = 2
+
+[node name="ToggleGridButton" type="Button" parent="Panel/Root/Body/ActionRowC" unique_name_in_owner=true]
+layout_mode = 2
+text = "Toggle Grid"
+
+[node name="TogglePropsButton" type="Button" parent="Panel/Root/Body/ActionRowC" unique_name_in_owner=true]
+layout_mode = 2
+text = "Toggle Props"
+
+[node name="CycleOverlayButton" type="Button" parent="Panel/Root/Body/ActionRowC" unique_name_in_owner=true]
+layout_mode = 2
+text = "Cycle Overlay"
+
+[node name="GridA" type="GridContainer" parent="Panel/Root/Body"]
+layout_mode = 2
+columns = 2
+
+[node name="CurrentSeedLabel" type="Label" parent="Panel/Root/Body/GridA"]
+layout_mode = 2
+text = "Current Seed"
+
+[node name="CurrentSeedValue" type="Label" parent="Panel/Root/Body/GridA" unique_name_in_owner=true]
+layout_mode = 2
+text = "-"
+
+[node name="OverlayLabel" type="Label" parent="Panel/Root/Body/GridA"]
+layout_mode = 2
+text = "Overlay"
+
+[node name="OverlayValue" type="Label" parent="Panel/Root/Body/GridA" unique_name_in_owner=true]
+layout_mode = 2
+text = "none"
+
+[node name="GridLabel" type="Label" parent="Panel/Root/Body/GridA"]
+layout_mode = 2
+text = "Grid"
+
+[node name="GridValue" type="Label" parent="Panel/Root/Body/GridA" unique_name_in_owner=true]
+layout_mode = 2
+text = "on"
+
+[node name="PropsLabel" type="Label" parent="Panel/Root/Body/GridA"]
+layout_mode = 2
+text = "Props"
+
+[node name="PropsValue" type="Label" parent="Panel/Root/Body/GridA" unique_name_in_owner=true]
+layout_mode = 2
+text = "on"
+
+[node name="ValidationLabel" type="Label" parent="Panel/Root/Body/GridA"]
+layout_mode = 2
+text = "Validation"
+
+[node name="ValidationValue" type="Label" parent="Panel/Root/Body/GridA" unique_name_in_owner=true]
+layout_mode = 2
+text = "-"
+
+[node name="ReferenceLabel" type="Label" parent="Panel/Root/Body/GridA"]
+layout_mode = 2
+text = "Reference Seed"
+
+[node name="ReferenceValue" type="Label" parent="Panel/Root/Body/GridA" unique_name_in_owner=true]
+layout_mode = 2
+text = "-"
+
+[node name="StatusLabel" type="Label" parent="Panel/Root/Body"]
+layout_mode = 2
+text = "Status"
+
+[node name="StatusValue" type="Label" parent="Panel/Root/Body" unique_name_in_owner=true]
+layout_mode = 2
+autowrap_mode = 2
+text = "-"
+
+[node name="DetailsValue" type="RichTextLabel" parent="Panel/Root/Body" unique_name_in_owner=true]
+layout_mode = 2
+size_flags_vertical = 3
+fit_content = true
+scroll_active = false
+bbcode_enabled = false
+text = "-"

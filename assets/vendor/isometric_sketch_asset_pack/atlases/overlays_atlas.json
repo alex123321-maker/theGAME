@@ -1,0 +1,73 @@
+{
+  "cell_size": [
+    128,
+    128
+  ],
+  "columns": 2,
+  "items": [
+    {
+      "name": "entry_marker",
+      "path": "overlays/entry_marker.png",
+      "atlas_rect": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "content_rect": [
+        0,
+        0,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "buildable_mask",
+      "path": "overlays/buildable_mask.png",
+      "atlas_rect": [
+        128,
+        0,
+        128,
+        128
+      ],
+      "content_rect": [
+        128,
+        32,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "threat_heat",
+      "path": "overlays/threat_heat.png",
+      "atlas_rect": [
+        0,
+        128,
+        128,
+        128
+      ],
+      "content_rect": [
+        0,
+        160,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "height_tint",
+      "path": "overlays/height_tint.png",
+      "atlas_rect": [
+        128,
+        128,
+        128,
+        128
+      ],
+      "content_rect": [
+        128,
+        160,
+        128,
+        64
+      ]
+    }
+  ]
+}

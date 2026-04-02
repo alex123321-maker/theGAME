@@ -1,0 +1,11 @@
+{
+	"profile_id": "default",
+	"width": 96,
+	"height": 96,
+	"entry_count": 3,
+	"central_zone_radius": 12,
+	"forest_cluster_count": 7,
+	"rock_cluster_count": 4,
+	"water_cluster_count": 2,
+	"max_blocked_near_center_ratio": 0.35
+}

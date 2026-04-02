@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scenes/map_view/map_view.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/presentation/map_renderer.gd" id="2_map_renderer"]
+[ext_resource type="Script" path="res://scripts/presentation/debug_overlay_renderer.gd" id="3_debug_renderer"]
+[ext_resource type="PackedScene" path="res://scenes/ui/debug_runtime_panel.tscn" id="4_runtime_panel"]
+
+[node name="MapView" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="MapRenderer" type="Node2D" parent="."]
+script = ExtResource("2_map_renderer")
+
+[node name="DebugOverlayRenderer" type="Node2D" parent="."]
+z_index = 50
+script = ExtResource("3_debug_renderer")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(0, 0)
+zoom = Vector2(1, 1)
+enabled = true
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="DebugRuntimePanel" parent="CanvasLayer" instance=ExtResource("4_runtime_panel")]

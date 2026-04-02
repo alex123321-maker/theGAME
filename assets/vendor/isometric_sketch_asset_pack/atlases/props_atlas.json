@@ -1,0 +1,265 @@
+{
+  "cell_size": [
+    128,
+    128
+  ],
+  "columns": 4,
+  "items": [
+    {
+      "name": "boulder_01",
+      "path": "props/boulder_01.png",
+      "atlas_rect": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "content_rect": [
+        0,
+        0,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "boulder_02",
+      "path": "props/boulder_02.png",
+      "atlas_rect": [
+        128,
+        0,
+        128,
+        128
+      ],
+      "content_rect": [
+        128,
+        0,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "boulder_03",
+      "path": "props/boulder_03.png",
+      "atlas_rect": [
+        256,
+        0,
+        128,
+        128
+      ],
+      "content_rect": [
+        256,
+        0,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "stump_01",
+      "path": "props/stump_01.png",
+      "atlas_rect": [
+        384,
+        0,
+        128,
+        128
+      ],
+      "content_rect": [
+        384,
+        0,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "stump_02",
+      "path": "props/stump_02.png",
+      "atlas_rect": [
+        0,
+        128,
+        128,
+        128
+      ],
+      "content_rect": [
+        0,
+        128,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "dead_tree_01",
+      "path": "props/dead_tree_01.png",
+      "atlas_rect": [
+        128,
+        128,
+        128,
+        128
+      ],
+      "content_rect": [
+        128,
+        128,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "dead_tree_02",
+      "path": "props/dead_tree_02.png",
+      "atlas_rect": [
+        256,
+        128,
+        128,
+        128
+      ],
+      "content_rect": [
+        256,
+        128,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "ruins_fragment_01",
+      "path": "props/ruins_fragment_01.png",
+      "atlas_rect": [
+        384,
+        128,
+        128,
+        128
+      ],
+      "content_rect": [
+        384,
+        128,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "ruins_fragment_02",
+      "path": "props/ruins_fragment_02.png",
+      "atlas_rect": [
+        0,
+        256,
+        128,
+        128
+      ],
+      "content_rect": [
+        0,
+        256,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "ruins_fragment_03",
+      "path": "props/ruins_fragment_03.png",
+      "atlas_rect": [
+        128,
+        256,
+        128,
+        128
+      ],
+      "content_rect": [
+        128,
+        256,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "broken_fence_01",
+      "path": "props/broken_fence_01.png",
+      "atlas_rect": [
+        256,
+        256,
+        128,
+        128
+      ],
+      "content_rect": [
+        256,
+        256,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "broken_fence_02",
+      "path": "props/broken_fence_02.png",
+      "atlas_rect": [
+        384,
+        256,
+        128,
+        128
+      ],
+      "content_rect": [
+        384,
+        256,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "cart_fragment_01",
+      "path": "props/cart_fragment_01.png",
+      "atlas_rect": [
+        0,
+        384,
+        128,
+        128
+      ],
+      "content_rect": [
+        0,
+        384,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "cart_fragment_02",
+      "path": "props/cart_fragment_02.png",
+      "atlas_rect": [
+        128,
+        384,
+        128,
+        128
+      ],
+      "content_rect": [
+        128,
+        384,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "log_pile_01",
+      "path": "props/log_pile_01.png",
+      "atlas_rect": [
+        256,
+        384,
+        128,
+        128
+      ],
+      "content_rect": [
+        256,
+        384,
+        128,
+        128
+      ]
+    },
+    {
+      "name": "log_pile_02",
+      "path": "props/log_pile_02.png",
+      "atlas_rect": [
+        384,
+        384,
+        128,
+        128
+      ],
+      "content_rect": [
+        384,
+        384,
+        128,
+        128
+      ]
+    }
+  ]
+}

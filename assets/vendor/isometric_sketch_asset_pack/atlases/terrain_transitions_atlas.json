@@ -1,0 +1,201 @@
+{
+  "cell_size": [
+    128,
+    64
+  ],
+  "columns": 4,
+  "items": [
+    {
+      "name": "road_to_ground_01",
+      "path": "terrain/transitions/road_to_ground_01.png",
+      "atlas_rect": [
+        0,
+        0,
+        128,
+        64
+      ],
+      "content_rect": [
+        0,
+        0,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "road_to_ground_02",
+      "path": "terrain/transitions/road_to_ground_02.png",
+      "atlas_rect": [
+        128,
+        0,
+        128,
+        64
+      ],
+      "content_rect": [
+        128,
+        0,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "road_to_ground_03",
+      "path": "terrain/transitions/road_to_ground_03.png",
+      "atlas_rect": [
+        256,
+        0,
+        128,
+        64
+      ],
+      "content_rect": [
+        256,
+        0,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "road_to_ground_04",
+      "path": "terrain/transitions/road_to_ground_04.png",
+      "atlas_rect": [
+        384,
+        0,
+        128,
+        64
+      ],
+      "content_rect": [
+        384,
+        0,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "clearing_to_ground_01",
+      "path": "terrain/transitions/clearing_to_ground_01.png",
+      "atlas_rect": [
+        0,
+        64,
+        128,
+        64
+      ],
+      "content_rect": [
+        0,
+        64,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "clearing_to_ground_02",
+      "path": "terrain/transitions/clearing_to_ground_02.png",
+      "atlas_rect": [
+        128,
+        64,
+        128,
+        64
+      ],
+      "content_rect": [
+        128,
+        64,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "clearing_to_ground_03",
+      "path": "terrain/transitions/clearing_to_ground_03.png",
+      "atlas_rect": [
+        256,
+        64,
+        128,
+        64
+      ],
+      "content_rect": [
+        256,
+        64,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "clearing_to_ground_04",
+      "path": "terrain/transitions/clearing_to_ground_04.png",
+      "atlas_rect": [
+        384,
+        64,
+        128,
+        64
+      ],
+      "content_rect": [
+        384,
+        64,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "obstacle_transition_01",
+      "path": "terrain/transitions/obstacle_transition_01.png",
+      "atlas_rect": [
+        0,
+        128,
+        128,
+        64
+      ],
+      "content_rect": [
+        0,
+        128,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "obstacle_transition_02",
+      "path": "terrain/transitions/obstacle_transition_02.png",
+      "atlas_rect": [
+        128,
+        128,
+        128,
+        64
+      ],
+      "content_rect": [
+        128,
+        128,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "obstacle_transition_03",
+      "path": "terrain/transitions/obstacle_transition_03.png",
+      "atlas_rect": [
+        256,
+        128,
+        128,
+        64
+      ],
+      "content_rect": [
+        256,
+        128,
+        128,
+        64
+      ]
+    },
+    {
+      "name": "obstacle_transition_04",
+      "path": "terrain/transitions/obstacle_transition_04.png",
+      "atlas_rect": [
+        384,
+        128,
+        128,
+        64
+      ],
+      "content_rect": [
+        384,
+        128,
+        128,
+        64
+      ]
+    }
+  ]
+}
