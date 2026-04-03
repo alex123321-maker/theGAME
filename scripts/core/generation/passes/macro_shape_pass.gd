@@ -42,32 +42,56 @@ func _build_irregular_village(
 ) -> Array[Vector2i]:
 	var village: Array[Vector2i] = [center]
 	var selected := {center: true}
-	var frontier: Array[Vector2i] = [center]
-	var limit_radius: float = sqrt(float(target_count)) * 1.35
-	var directions: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
+	var frontier: Array[Vector2i] = []
+	var limit_radius: float = sqrt(float(target_count)) * 1.5
+
+	_push_frontier_neighbors(center, map_data, selected, frontier)
 
 	while village.size() < target_count and not frontier.is_empty():
-		var current: Vector2i = frontier[rng.randi_range(0, frontier.size() - 1)]
-		var direction: Vector2i = directions[rng.randi_range(0, directions.size() - 1)]
-		var next: Vector2i = current + direction
+		var frontier_index: int = rng.randi_range(0, frontier.size() - 1)
+		var candidate: Vector2i = frontier[frontier_index]
+		frontier.remove_at(frontier_index)
 
-		if selected.has(next):
-			frontier.erase(current)
+		if selected.has(candidate):
 			continue
-		if not map_data.is_in_bounds(next.x, next.y):
-			frontier.erase(current)
-			continue
-		if next.distance_to(center) > limit_radius and rng.randf() < 0.85:
+		if not map_data.is_in_bounds(candidate.x, candidate.y):
 			continue
 
-		selected[next] = true
-		village.append(next)
-		frontier.append(next)
+		var distance_to_center: float = candidate.distance_to(center)
+		if distance_to_center > limit_radius:
+			if rng.randf() < 0.92:
+				continue
+		elif distance_to_center > limit_radius * 0.82:
+			if rng.randf() < 0.45:
+				continue
 
-		if rng.randf() < 0.18 and frontier.size() > 8:
-			frontier.remove_at(rng.randi_range(0, frontier.size() - 1))
+		selected[candidate] = true
+		village.append(candidate)
+		_push_frontier_neighbors(candidate, map_data, selected, frontier)
 
 	return village
+
+func _push_frontier_neighbors(
+	point: Vector2i,
+	map_data: MapData,
+	selected: Dictionary,
+	frontier: Array[Vector2i]
+) -> void:
+	var directions: Array[Vector2i] = [
+		Vector2i.UP,
+		Vector2i.RIGHT,
+		Vector2i.DOWN,
+		Vector2i.LEFT,
+	]
+	for direction in directions:
+		var next: Vector2i = point + direction
+		if selected.has(next):
+			continue
+		if not map_data.is_in_bounds(next.x, next.y):
+			continue
+		if frontier.has(next):
+			continue
+		frontier.append(next)
 
 func _choose_height_class(y: int, map_height: int) -> int:
 	var band_ratio: float = float(y) / max(1.0, float(map_height - 1))

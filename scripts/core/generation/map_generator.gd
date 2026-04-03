@@ -5,7 +5,6 @@ const GameConfigData = preload("res://autoload/game_config.gd")
 const MacroShapePass = preload("res://scripts/core/generation/passes/macro_shape_pass.gd")
 const RoutesPass = preload("res://scripts/core/generation/passes/routes_pass.gd")
 const ObstaclesPass = preload("res://scripts/core/generation/passes/obstacles_pass.gd")
-const ResourcesPass = preload("res://scripts/core/generation/passes/resources_pass.gd")
 const CleanupPass = preload("res://scripts/core/generation/passes/cleanup_pass.gd")
 
 const MapDataClass = preload("res://scripts/core/map/map_data.gd")
@@ -14,7 +13,6 @@ const MapValidatorClass = preload("res://scripts/core/map/map_validator.gd")
 var _macro_shape_pass := MacroShapePass.new()
 var _routes_pass := RoutesPass.new()
 var _obstacles_pass := ObstaclesPass.new()
-var _resources_pass := ResourcesPass.new()
 var _cleanup_pass := CleanupPass.new()
 var _validator := MapValidatorClass.new()
 
@@ -34,7 +32,6 @@ func generate(seed: int, config: Dictionary) -> MapData:
 	_macro_shape_pass.apply(map_data, rng, config)
 	_routes_pass.apply(map_data, rng, config)
 	_obstacles_pass.apply(map_data, rng, config)
-	_resources_pass.apply(map_data, rng, config)
 	_cleanup_pass.apply(map_data, rng, config)
 
 	map_data.validation_report = _validator.validate(map_data)

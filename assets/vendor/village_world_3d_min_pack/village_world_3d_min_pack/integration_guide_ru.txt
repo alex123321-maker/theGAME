@@ -1,0 +1,59 @@
+Godot 4.6.1 integration guide
+=============================
+
+Быстрое подключение
+-------------------
+1. Скопируй папку village_world_3d_min_pack в проект.
+2. Импортируй GLB-файлы стандартным импортом Godot.
+3. Для логики карты храни terrain_type, height_class, buildable и прочие поля отдельно в MapData.
+4. Визуальный слой собирай через отдельный 3D MapRenderer (трёхмерный рендерер карты).
+5. Buildable mask, threat heat, height tint и entry marker оставляй отдельными наложениями.
+
+Рекомендуемое соответствие типов
+--------------------------------
+terrain_type:
+- ground -> environment/terrain/ground/*
+- clearing -> environment/terrain/clearing/*
+- road -> environment/terrain/road/*
+
+boundary_type:
+- forest -> environment/boundaries/forest/*
+- rock -> environment/boundaries/rock/*
+- water -> environment/boundaries/water/*
+- ravine -> environment/boundaries/ravine/*
+
+transition_type:
+- road_to_ground -> environment/transitions/road_to_ground_soft.glb
+- clearing_to_ground -> environment/transitions/clearing_to_ground_soft.glb
+- obstacle_transition_rock -> environment/transitions/obstacle_transition_rock.glb
+- obstacle_transition_forest -> environment/transitions/obstacle_transition_forest.glb
+
+prop_type:
+- boulder -> environment/props/major/boulder_large.glb
+- stump -> environment/props/major/stump_wide.glb
+- dead_tree -> environment/props/major/dead_tree_a.glb / dead_tree_b.glb
+- ruins_fragment -> environment/props/major/ruins_fragment.glb
+- broken_fence -> environment/props/major/broken_fence_segment.glb
+- cart_fragment -> environment/props/major/cart_fragment.glb
+- log_pile -> environment/props/major/log_pile.glb
+
+Практические правила
+--------------------
+- Не считывай логику из геометрии.
+- Поворот straight-модулей лучше делать кодом на 0 / 90 / 180 / 270 градусов.
+- Props не должны занимать clearing, если по данным клетка нужна под строительство.
+- Для water и ravine сначала ставь логическую клетку, затем визуальный модуль.
+- Не делай debug-слои частью мира: держи их отдельно через CanvasLayer или отдельный диагностический рендер.
+
+Минимальный порядок использования
+---------------------------------
+1. ground / clearing / road
+2. forest / rock / water / ravine
+3. transitions
+4. props
+5. overlays
+
+Замечание
+---------
+Если ты дальше уйдёшь в полноценный GridMap (трёхмерную карту модулей), не делай GridMap источником истины.
+Он должен оставаться только отображением MapData.

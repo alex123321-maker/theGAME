@@ -1,14 +1,13 @@
-extends Node2D
+extends Node3D
 
 const GameConfigData = preload("res://autoload/game_config.gd")
-const WorldProjection = preload("res://scripts/presentation/world_projection.gd")
+const WorldGridProjection3DClass = preload("res://scripts/presentation/world_grid_projection_3d.gd")
 const MapGeneratorClass = preload("res://scripts/core/generation/map_generator.gd")
 const MapSerializerClass = preload("res://scripts/core/map/map_serializer.gd")
 const MapTestRunnerClass = preload("res://scripts/map_test_runner.gd")
 
-@onready var camera: Camera2D = $Camera2D
-@onready var map_renderer: MapRenderer = $MapRenderer
-@onready var debug_overlay_renderer: DebugOverlayRenderer = $DebugOverlayRenderer
+@onready var camera: Camera3D = $Camera3D
+@onready var map_renderer: Node3D = $MapRenderer3D
 @onready var runtime_panel: DebugRuntimePanel = $CanvasLayer/DebugRuntimePanel
 @onready var run_context = get_node("/root/RunContext")
 @onready var debug_bus = get_node("/root/DebugBus")
@@ -48,26 +47,26 @@ func _process(delta: float) -> void:
 	_handle_camera_input(delta)
 
 func _handle_camera_input(delta: float) -> void:
-	var move_speed: float = 1000.0
-	var zoom_speed: float = 1.9
-	var move := Vector2.ZERO
+	var move_speed: float = 25.0
+	var zoom_speed: float = 14.0
+	var move := Vector3.ZERO
 
 	if Input.is_action_pressed("camera_pan_up"):
-		move.y -= 1.0
+		move.z -= 1.0
 	if Input.is_action_pressed("camera_pan_down"):
-		move.y += 1.0
+		move.z += 1.0
 	if Input.is_action_pressed("camera_pan_left"):
 		move.x -= 1.0
 	if Input.is_action_pressed("camera_pan_right"):
 		move.x += 1.0
 
-	if move != Vector2.ZERO:
+	if move != Vector3.ZERO:
 		camera.position += move.normalized() * move_speed * delta
 
 	if Input.is_action_pressed("camera_zoom_in"):
-		camera.zoom = camera.zoom.lerp(Vector2(0.6, 0.6), zoom_speed * delta)
+		camera.size = maxf(8.0, camera.size - (zoom_speed * delta))
 	if Input.is_action_pressed("camera_zoom_out"):
-		camera.zoom = camera.zoom.lerp(Vector2(1.8, 1.8), zoom_speed * delta)
+		camera.size = minf(120.0, camera.size + (zoom_speed * delta))
 
 func apply_seed_and_regenerate(seed: int) -> void:
 	run_context.set_seed(seed)
@@ -172,7 +171,7 @@ func _on_seed_changed(new_seed: int) -> void:
 	runtime_panel.set_current_seed(new_seed)
 
 func _on_overlay_changed(new_overlay_mode: String) -> void:
-	debug_overlay_renderer.set_overlay_mode(new_overlay_mode)
+	map_renderer.set_overlay_mode(new_overlay_mode)
 	_update_runtime_panel()
 
 func _on_grid_visibility_changed(is_visible: bool) -> void:
@@ -192,16 +191,17 @@ func _generate_current_map(reason: String) -> void:
 	_map_data = _generator.generate(run_context.current_seed, _last_generation_config)
 
 	if not _camera_initialized:
-		var logical_center := Vector2i(_map_data.width / 2, _map_data.height / 2)
-		camera.position = WorldProjection.logical_to_screen(logical_center)
+		var center_world: Vector3 = WorldGridProjection3DClass.map_center_world(_map_data.width, _map_data.height, 0.0)
+		var max_extent: float = float(maxi(_map_data.width, _map_data.height)) * WorldGridProjection3DClass.TILE_WORLD_SIZE
+		camera.position = center_world + Vector3(-max_extent * 0.32, max_extent * 0.38, max_extent * 0.32)
+		camera.size = max_extent * 0.30
+		camera.look_at(center_world, Vector3.UP)
 		_camera_initialized = true
 
 	map_renderer.set_map_data(_map_data)
 	map_renderer.set_grid_visible(run_context.is_grid_visible)
 	map_renderer.set_props_visible(run_context.is_props_visible)
-
-	debug_overlay_renderer.set_map_data(_map_data)
-	debug_overlay_renderer.set_overlay_mode(run_context.current_overlay_mode)
+	map_renderer.set_overlay_mode(run_context.current_overlay_mode)
 	_update_hover_from_mouse()
 
 	_update_runtime_panel()
@@ -275,10 +275,20 @@ func _print_diagnostics_to_console() -> void:
 func _update_hover_from_mouse() -> void:
 	if _map_data == null:
 		return
-	var world_pos: Vector2 = get_global_mouse_position()
-	var logical: Vector2i = WorldProjection.screen_to_logical_precise(world_pos)
+	var mouse_position: Vector2 = get_viewport().get_mouse_position()
+	var from: Vector3 = camera.project_ray_origin(mouse_position)
+	var direction: Vector3 = camera.project_ray_normal(mouse_position)
+	if absf(direction.y) <= 0.00001:
+		map_renderer.set_hover_tile(Vector2i.ZERO, false)
+		return
+	var t: float = -from.y / direction.y
+	if t < 0.0:
+		map_renderer.set_hover_tile(Vector2i.ZERO, false)
+		return
+	var hit: Vector3 = from + (direction * t)
+	var logical: Vector2i = map_renderer.get_logical_from_world(hit)
 	var is_valid: bool = _map_data.is_in_bounds(logical.x, logical.y)
-	debug_overlay_renderer.set_hover_tile(logical, is_valid)
+	map_renderer.set_hover_tile(logical, is_valid)
 
 func export_current_map_json() -> String:
 	if _map_data == null:

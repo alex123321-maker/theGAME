@@ -1,0 +1,477 @@
+{
+  "pack_name": "village_world_3d_min_pack",
+  "version": "0.1.0",
+  "engine_target": "Godot 4.6.1",
+  "style": {
+    "mode": "minimal 3D graybox",
+    "visual_direction": [
+      "fixed isometric 2.5D",
+      "low visual noise",
+      "monochrome grayscale",
+      "almost white base",
+      "large readable forms",
+      "not final art"
+    ]
+  },
+  "grid": {
+    "cell_size_world_units": [
+      2.0,
+      2.0
+    ],
+    "vertical_axis": "Y",
+    "pivot_rule": "terrain modules centered on cell, resting on Y=0; props centered on local footprint and resting on Y=0"
+  },
+  "counts": {
+    "glb_models": 34,
+    "overlay_png": 4,
+    "shadow_masks_png": 2
+  },
+  "categories": {
+    "terrain_ground": [
+      "ground_01",
+      "ground_02",
+      "ground_03"
+    ],
+    "terrain_clearing": [
+      "clearing_01",
+      "clearing_02"
+    ],
+    "terrain_road": [
+      "road_narrow_straight",
+      "road_narrow_corner",
+      "road_medium_straight",
+      "road_medium_t",
+      "road_wide_straight"
+    ],
+    "boundaries_forest": [
+      "forest_edge_straight",
+      "forest_edge_corner",
+      "forest_edge_sparse"
+    ],
+    "boundaries_rock": [
+      "rock_edge_straight",
+      "rock_edge_corner",
+      "rock_edge_ridge"
+    ],
+    "boundaries_water": [
+      "water_edge_straight",
+      "water_edge_corner",
+      "water_channel"
+    ],
+    "boundaries_ravine": [
+      "ravine_edge_straight",
+      "ravine_edge_corner",
+      "ravine_narrow_pass"
+    ],
+    "transitions": [
+      "road_to_ground_soft",
+      "clearing_to_ground_soft",
+      "obstacle_transition_rock",
+      "obstacle_transition_forest"
+    ],
+    "props_major": [
+      "boulder_large",
+      "stump_wide",
+      "dead_tree_a",
+      "dead_tree_b",
+      "ruins_fragment",
+      "broken_fence_segment",
+      "cart_fragment",
+      "log_pile"
+    ]
+  },
+  "placement_notes": {
+    "rotatable_generic_modules": [
+      "road_narrow_straight",
+      "road_medium_straight",
+      "road_wide_straight",
+      "forest_edge_straight",
+      "rock_edge_straight",
+      "water_edge_straight",
+      "water_channel",
+      "ravine_edge_straight",
+      "ravine_narrow_pass",
+      "broken_fence_segment",
+      "cart_fragment",
+      "log_pile"
+    ],
+    "use_as_graybox": true,
+    "do_not_embed_debug_layers_in_geometry": true
+  },
+  "assets": [
+    {
+      "name": "ground_01",
+      "path": "environment/terrain/ground/ground_01.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "ground_02",
+      "path": "environment/terrain/ground/ground_02.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "ground_03",
+      "path": "environment/terrain/ground/ground_03.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "clearing_01",
+      "path": "environment/terrain/clearing/clearing_01.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "clearing_02",
+      "path": "environment/terrain/clearing/clearing_02.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "road_narrow_straight",
+      "path": "environment/terrain/road/road_narrow_straight.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "road_narrow_corner",
+      "path": "environment/terrain/road/road_narrow_corner.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "road_medium_straight",
+      "path": "environment/terrain/road/road_medium_straight.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "road_medium_t",
+      "path": "environment/terrain/road/road_medium_t.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "road_wide_straight",
+      "path": "environment/terrain/road/road_wide_straight.glb",
+      "role": "terrain",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "forest_edge_straight",
+      "path": "environment/boundaries/forest/forest_edge_straight.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "forest_edge_corner",
+      "path": "environment/boundaries/forest/forest_edge_corner.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "forest_edge_sparse",
+      "path": "environment/boundaries/forest/forest_edge_sparse.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "rock_edge_straight",
+      "path": "environment/boundaries/rock/rock_edge_straight.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "rock_edge_corner",
+      "path": "environment/boundaries/rock/rock_edge_corner.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "rock_edge_ridge",
+      "path": "environment/boundaries/rock/rock_edge_ridge.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "water_edge_straight",
+      "path": "environment/boundaries/water/water_edge_straight.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "water_edge_corner",
+      "path": "environment/boundaries/water/water_edge_corner.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "water_channel",
+      "path": "environment/boundaries/water/water_channel.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "ravine_edge_straight",
+      "path": "environment/boundaries/ravine/ravine_edge_straight.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "ravine_edge_corner",
+      "path": "environment/boundaries/ravine/ravine_edge_corner.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "ravine_narrow_pass",
+      "path": "environment/boundaries/ravine/ravine_narrow_pass.glb",
+      "role": "boundary",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "road_to_ground_soft",
+      "path": "environment/transitions/road_to_ground_soft.glb",
+      "role": "transition",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "clearing_to_ground_soft",
+      "path": "environment/transitions/clearing_to_ground_soft.glb",
+      "role": "transition",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "obstacle_transition_rock",
+      "path": "environment/transitions/obstacle_transition_rock.glb",
+      "role": "transition",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "obstacle_transition_forest",
+      "path": "environment/transitions/obstacle_transition_forest.glb",
+      "role": "transition",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "boulder_large",
+      "path": "environment/props/major/boulder_large.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "stump_wide",
+      "path": "environment/props/major/stump_wide.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "dead_tree_a",
+      "path": "environment/props/major/dead_tree_a.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "dead_tree_b",
+      "path": "environment/props/major/dead_tree_b.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "ruins_fragment",
+      "path": "environment/props/major/ruins_fragment.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": false
+    },
+    {
+      "name": "broken_fence_segment",
+      "path": "environment/props/major/broken_fence_segment.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "cart_fragment",
+      "path": "environment/props/major/cart_fragment.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    },
+    {
+      "name": "log_pile",
+      "path": "environment/props/major/log_pile.glb",
+      "role": "prop",
+      "footprint_cells": [
+        1,
+        1
+      ],
+      "pivot": "center_bottom",
+      "rotatable": true
+    }
+  ]
+}
