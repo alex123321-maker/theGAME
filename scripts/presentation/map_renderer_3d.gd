@@ -123,7 +123,7 @@ func _build_surface_layer() -> void:
 		if tile.is_water:
 			continue
 		var color: Color = _surface_color(tile)
-		var mesh_instance := _build_flat_tile_mesh(color, TERRAIN_Y + _height_offset(tile.height_class))
+		var mesh_instance := _build_flat_tile_mesh(color, TERRAIN_Y)
 		mesh_instance.position = WorldGridProjection3DClass.logical_to_world(Vector2i(tile.x, tile.y), mesh_instance.position.y)
 		_surface_root.add_child(mesh_instance)
 
@@ -348,17 +348,6 @@ func _transition_color(transition_type: int) -> Color:
 			return Color(0.12, 0.10, 0.10, 0.95)
 		_:
 			return Color(1.0, 1.0, 1.0, 0.0)
-
-func _height_offset(height_class: int) -> float:
-	match height_class:
-		MapTypes.HeightClass.LOW:
-			return -0.02
-		MapTypes.HeightClass.HIGH:
-			return 0.03
-		MapTypes.HeightClass.DROP_EDGE:
-			return -0.05
-		_:
-			return 0.0
 
 func _blocker_scale(blocker_type: int) -> float:
 	match blocker_type:

@@ -10,7 +10,7 @@ func initialize_ground(map_data: MapData, composition: Dictionary) -> void:
 	for tile in map_data.tiles:
 		tile.terrain_type = MapTypes.TerrainType.GROUND
 		tile.base_terrain_type = MapTypes.TerrainType.GROUND
-		tile.height_class = _choose_height_class(tile.x, tile.y, map_data.width, map_data.height)
+		tile.height_class = MapTypes.HeightClass.MID
 		tile.region_id = 1
 		tile.region_type = MapTypes.RegionType.OPEN_GROUND
 		tile.blocker_type = MapTypes.BlockerType.NONE
@@ -88,16 +88,6 @@ func stamp_approach_regions(map_data: MapData, composition: Dictionary) -> void:
 				tile.region_type = MapTypes.RegionType.APPROACH_CORRIDOR
 				if not tile.debug_tags.has("approach_corridor"):
 					tile.debug_tags.append("approach_corridor")
-
-func _choose_height_class(x: int, y: int, width: int, height: int) -> int:
-	var nx: float = (float(x) / max(1.0, float(width - 1))) - 0.5
-	var ny: float = (float(y) / max(1.0, float(height - 1))) - 0.5
-	var slope_bias: float = (ny * 0.7) - (nx * 0.18)
-	if slope_bias < -0.16:
-		return MapTypes.HeightClass.LOW
-	if slope_bias > 0.18:
-		return MapTypes.HeightClass.HIGH
-	return MapTypes.HeightClass.MID
 
 func _grow_clearing_points(
 	map_data: MapData,

@@ -16,7 +16,7 @@ func apply(map_data: MapData, rng: RandomNumberGenerator, config: Dictionary) ->
 		for x in range(map_data.width):
 			var tile = map_data.get_tile(x, y)
 			tile.terrain_type = MapTypes.TerrainType.GROUND
-			tile.height_class = _choose_height_class(y, map_data.height)
+			tile.height_class = MapTypes.HeightClass.MID
 			tile.walk_cost = 1.0
 			tile.is_buildable = false
 			tile.is_future_wallable = false
@@ -92,11 +92,3 @@ func _push_frontier_neighbors(
 		if frontier.has(next):
 			continue
 		frontier.append(next)
-
-func _choose_height_class(y: int, map_height: int) -> int:
-	var band_ratio: float = float(y) / max(1.0, float(map_height - 1))
-	if band_ratio < 0.33:
-		return MapTypes.HeightClass.LOW
-	if band_ratio < 0.66:
-		return MapTypes.HeightClass.MID
-	return MapTypes.HeightClass.HIGH
