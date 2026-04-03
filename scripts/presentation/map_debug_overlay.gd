@@ -79,16 +79,6 @@ func _overlay_color(tile) -> Color:
 			return Color(0.20, 0.52, 0.95, 0.34) if tile.is_water else Color(0.0, 0.0, 0.0, 0.0)
 		"blockers":
 			return Color(0.18, 0.18, 0.18, 0.34) if tile.is_blocked else Color(0.0, 0.0, 0.0, 0.0)
-		"height":
-			match tile.height_class:
-				MapTypes.HeightClass.LOW:
-					return Color(0.22, 0.44, 0.88, 0.26)
-				MapTypes.HeightClass.HIGH:
-					return Color(0.88, 0.44, 0.22, 0.26)
-				MapTypes.HeightClass.DROP_EDGE:
-					return Color(0.06, 0.06, 0.06, 0.34)
-				_:
-					return Color(0.76, 0.76, 0.76, 0.14)
 		"buildable":
 			return Color(0.20, 0.78, 0.34, 0.28) if tile.is_buildable else Color(0.68, 0.08, 0.08, 0.08)
 		"validation":

@@ -7,7 +7,6 @@ const PACK_ROOT := "res://assets/vendor/isometric_sketch_asset_pack"
 const ENTRY_MARKER_PATH := PACK_ROOT + "/overlays/entry_marker.png"
 const BUILDABLE_MASK_PATH := PACK_ROOT + "/overlays/buildable_mask.png"
 const THREAT_HEAT_PATH := PACK_ROOT + "/overlays/threat_heat.png"
-const HEIGHT_TINT_PATH := PACK_ROOT + "/overlays/height_tint.png"
 
 var map_data: MapData
 var overlay_mode: String = "none"
@@ -78,8 +77,6 @@ func _draw_hover_highlight(logical: Vector2i) -> void:
 
 func _overlay_texture_path() -> String:
 	match overlay_mode:
-		"height":
-			return HEIGHT_TINT_PATH
 		"buildable":
 			return BUILDABLE_MASK_PATH
 		"threat":
@@ -89,14 +86,6 @@ func _overlay_texture_path() -> String:
 
 func _overlay_modulate_for_tile(tile) -> Color:
 	match overlay_mode:
-		"height":
-			match tile.height_class:
-				MapTypes.HeightClass.LOW:
-					return Color(0.18, 0.52, 0.95, 0.30)
-				MapTypes.HeightClass.MID:
-					return Color(0.17, 0.88, 0.38, 0.24)
-				MapTypes.HeightClass.HIGH:
-					return Color(0.98, 0.62, 0.18, 0.28)
 		"buildable":
 			return Color(0.1, 0.85, 0.2, 0.24) if tile.is_buildable else Color(0.95, 0.2, 0.25, 0.12)
 		"threat":

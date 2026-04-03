@@ -208,10 +208,15 @@ func _default_satellite_motifs() -> Array:
 			"size_bias_max": 0.98,
 			"aggression_min": 0.28,
 			"aggression_max": 0.58,
+			"allow_disconnected_clusters": true,
+			"connect_nuclei_chance": 0.32,
+			"max_links": 2,
+			"min_component_tiles": 9,
 		},
 		{
 			"kind": MapTypes.BlockerType.ROCK,
 			"shape": "spine",
+			"ridge_profile": "thin",
 			"anchor_min": Vector2(0.66, 0.14),
 			"anchor_max": Vector2(0.88, 0.36),
 			"length_min": 10,
@@ -240,6 +245,10 @@ func _default_satellite_motifs() -> Array:
 			"size_bias_max": 1.02,
 			"aggression_min": 0.24,
 			"aggression_max": 0.56,
+			"allow_disconnected_clusters": true,
+			"connect_nuclei_chance": 0.28,
+			"max_links": 2,
+			"min_component_tiles": 10,
 		},
 	]
 
@@ -278,9 +287,36 @@ func _realize_motif(source: Dictionary, rng: RandomNumberGenerator, region_id: i
 		float(motif.get("size_bias_max", 1.2)),
 		rng
 	)
+	if int(motif.get("kind", MapTypes.BlockerType.NONE)) == MapTypes.BlockerType.ROCK and String(motif.get("shape", "metaball")) == "spine":
+		if String(motif.get("ridge_profile", "")) == "thin":
+			_apply_thin_ridge_profile(motif, rng)
+	if int(motif.get("kind", MapTypes.BlockerType.NONE)) == MapTypes.BlockerType.FOREST and String(motif.get("shape", "metaball")) == "metaball":
+		var allow_disconnected: bool = bool(motif.get("allow_disconnected_clusters", motif_role == "satellite"))
+		motif["allow_disconnected_clusters"] = allow_disconnected
+		if allow_disconnected:
+			if not motif.has("connect_nuclei_chance"):
+				motif["connect_nuclei_chance"] = _random_float(0.20, 0.40, rng)
+			if not motif.has("max_links"):
+				motif["max_links"] = 2
+			if not motif.has("min_component_tiles"):
+				motif["min_component_tiles"] = 10
 	motif["region_id"] = region_id
 	motif["motif_role"] = motif_role
 	return motif
+
+func _apply_thin_ridge_profile(motif: Dictionary, rng: RandomNumberGenerator) -> void:
+	motif["length_min"] = maxf(float(motif.get("length_min", 24.0)), 24.0)
+	motif["length_max"] = maxf(float(motif.get("length_max", 42.0)), 42.0)
+	motif["thickness_min"] = minf(float(motif.get("thickness_min", 1.6)), 1.6)
+	motif["thickness_max"] = minf(float(motif.get("thickness_max", 3.0)), 3.0)
+	motif["segments_min"] = maxi(int(motif.get("segments_min", 3)), 3)
+	motif["segments_max"] = maxi(int(motif.get("segments_max", 5)), 5)
+	motif["bend_min"] = minf(float(motif.get("bend_min", 0.10)), 0.10)
+	motif["bend_max"] = minf(float(motif.get("bend_max", 0.26)), 0.26)
+	if not motif.has("edge_band"):
+		motif["edge_band"] = 0 if rng.randf() < 0.45 else 1
+	elif int(motif.get("edge_band", 1)) > 0 and rng.randf() < 0.35:
+		motif["edge_band"] = 0
 
 func _too_close_to_existing(candidate: Dictionary, existing: Array[Dictionary], min_distance: float) -> bool:
 	var anchor: Vector2 = candidate.get("anchor", Vector2(0.5, 0.5))
@@ -400,49 +436,51 @@ func _scenario_families() -> Array[Dictionary]:
 				},
 			],
 		},
-		{
-			"id": "split_ridges",
-			"center_offset_min": Vector2(-0.05, -0.04),
-			"center_offset_max": Vector2(0.05, 0.04),
-			"entry_profiles": [
-				{"side": "north", "offset_min": 0.40, "offset_max": 0.62},
-				{"side": "east", "offset_min": 0.34, "offset_max": 0.58},
-				{"side": "west", "offset_min": 0.40, "offset_max": 0.66},
-			],
-			"corridor_width_range": Vector2i(3, 4),
-			"blocker_motifs": [
-				{
-					"kind": MapTypes.BlockerType.ROCK,
-					"shape": "spine",
-					"anchor_min": Vector2(0.22, 0.24),
-					"anchor_max": Vector2(0.40, 0.42),
-					"length_min": 18,
-					"length_max": 32,
-					"thickness_min": 2.6,
-					"thickness_max": 4.6,
+			{
+				"id": "split_ridges",
+				"center_offset_min": Vector2(-0.05, -0.04),
+				"center_offset_max": Vector2(0.05, 0.04),
+				"entry_profiles": [
+					{"side": "north", "offset_min": 0.40, "offset_max": 0.62},
+					{"side": "east", "offset_min": 0.34, "offset_max": 0.58},
+					{"side": "west", "offset_min": 0.40, "offset_max": 0.66},
+				],
+				"corridor_width_range": Vector2i(3, 4),
+				"blocker_motifs": [
+					{
+						"kind": MapTypes.BlockerType.ROCK,
+						"shape": "spine",
+						"ridge_profile": "thin",
+						"anchor_min": Vector2(0.22, 0.24),
+						"anchor_max": Vector2(0.40, 0.42),
+						"length_min": 18,
+						"length_max": 32,
+						"thickness_min": 2.6,
+						"thickness_max": 4.6,
 					"bend_min": 0.16,
 					"bend_max": 0.34,
 					"segments_min": 2,
-					"segments_max": 4,
-					"edge_band": 1,
-				},
-				{
-					"kind": MapTypes.BlockerType.ROCK,
-					"shape": "spine",
-					"anchor_min": Vector2(0.62, 0.56),
-					"anchor_max": Vector2(0.84, 0.74),
-					"length_min": 18,
-					"length_max": 34,
-					"thickness_min": 2.4,
+						"segments_max": 4,
+						"edge_band": 1,
+					},
+					{
+						"kind": MapTypes.BlockerType.ROCK,
+						"shape": "spine",
+						"ridge_profile": "thin",
+						"anchor_min": Vector2(0.62, 0.56),
+						"anchor_max": Vector2(0.84, 0.74),
+						"length_min": 18,
+						"length_max": 34,
+						"thickness_min": 2.4,
 					"thickness_max": 4.8,
 					"bend_min": 0.12,
 					"bend_max": 0.28,
 					"segments_min": 2,
-					"segments_max": 4,
-					"edge_band": 1,
-				},
-			],
-		},
+						"segments_max": 4,
+						"edge_band": 1,
+					},
+				],
+			},
 		{
 			"id": "ridge_plus_flank",
 			"center_offset_min": Vector2(-0.10, -0.06),

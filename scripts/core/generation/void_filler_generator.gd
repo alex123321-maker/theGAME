@@ -50,52 +50,148 @@ func _select_void_peaks(
 	entry_dist: Array[int],
 	occupied_dist: Array[int]
 ) -> Array[Dictionary]:
-	var candidates: Array[Dictionary] = []
-	for y in range(1, map_data.height - 1):
-		for x in range(1, map_data.width - 1):
-			if (x % 2) != 0 or (y % 2) != 0:
-				continue
-			var point := Vector2i(x, y)
-			if keep_corridor_mask.has(point):
-				continue
-			var tile = map_data.get_tile(x, y)
-			if tile == null:
-				continue
-			if tile.region_type == MapTypes.RegionType.CENTER_CLEARING:
-				continue
-			if tile.is_road or tile.is_water or tile.is_blocked:
-				continue
-			if tile.base_terrain_type == MapTypes.TerrainType.FOREST or tile.base_terrain_type == MapTypes.TerrainType.ROCK:
-				continue
-			var index: int = map_data.index_of(x, y)
-			var d_center: int = center_dist[index]
-			var d_entry: int = entry_dist[index]
-			var d_occ: int = occupied_dist[index]
-			if d_occ < 6:
-				continue
-			var score: float = (float(d_occ) * 0.56) + (float(d_center) * 0.27) + (float(d_entry) * 0.17)
-			if x < 8 or y < 8 or x > map_data.width - 9 or y > map_data.height - 9:
-				score *= 0.82
-			score += rng.randf_range(-1.1, 1.1)
-			candidates.append({"point": point, "score": score, "d_occ": d_occ})
-
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return float(a.get("score", 0.0)) > float(b.get("score", 0.0))
-	)
-	if candidates.is_empty():
+	var open_components: Array[Dictionary] = _largest_open_components(map_data, keep_corridor_mask, 6)
+	if open_components.is_empty():
 		return []
 
 	var selected: Array[Dictionary] = []
 	var target_count: int = rng.randi_range(2, 4)
-	for candidate in candidates:
+	var focused_component_count: int = mini(2, open_components.size())
+	for index in range(focused_component_count):
+		var focused: Dictionary = open_components[index]
+		var peak: Dictionary = _best_peak_in_component(
+			map_data,
+			focused.get("points", []),
+			rng,
+			keep_corridor_mask,
+			center_dist,
+			entry_dist,
+			occupied_dist,
+			selected
+		)
+		if peak.is_empty():
+			continue
+		selected.append(peak)
+
+	for component in open_components:
 		if selected.size() >= target_count:
 			break
-		var point: Vector2i = candidate.get("point", Vector2i.ZERO)
-		if _near_selected_peak(point, selected, 14):
-			continue
-		selected.append(candidate)
+		var component_size: int = int(component.get("size", 0))
+		var peaks_for_component: int = 2 if component_size > 420 else 1
+		var placed_for_component: int = 0
+		while placed_for_component < peaks_for_component and selected.size() < target_count:
+			var next_peak: Dictionary = _best_peak_in_component(
+				map_data,
+				component.get("points", []),
+				rng,
+				keep_corridor_mask,
+				center_dist,
+				entry_dist,
+				occupied_dist,
+				selected
+			)
+			if next_peak.is_empty():
+				break
+			selected.append(next_peak)
+			placed_for_component += 1
 
 	return selected
+
+func _largest_open_components(map_data: MapData, keep_corridor_mask: Dictionary, limit: int) -> Array[Dictionary]:
+	var visited := {}
+	var components: Array[Dictionary] = []
+	for tile in map_data.tiles:
+		var start := Vector2i(tile.x, tile.y)
+		if visited.has(start):
+			continue
+		if keep_corridor_mask.has(start):
+			continue
+		if not _is_open_candidate_tile(tile):
+			continue
+		var component_points: Array[Vector2i] = []
+		var frontier: Array[Vector2i] = [start]
+		visited[start] = true
+		while not frontier.is_empty():
+			var current: Vector2i = frontier.pop_front()
+			component_points.append(current)
+			for neighbor in [current + Vector2i.LEFT, current + Vector2i.RIGHT, current + Vector2i.UP, current + Vector2i.DOWN]:
+				if visited.has(neighbor):
+					continue
+				if not map_data.is_in_bounds(neighbor.x, neighbor.y):
+					continue
+				if keep_corridor_mask.has(neighbor):
+					continue
+				var next_tile = map_data.get_tile(neighbor.x, neighbor.y)
+				if not _is_open_candidate_tile(next_tile):
+					continue
+				visited[neighbor] = true
+				frontier.append(neighbor)
+		if component_points.size() < 24:
+			continue
+		components.append({
+			"size": component_points.size(),
+			"points": component_points,
+		})
+	components.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("size", 0)) > int(b.get("size", 0))
+	)
+	if components.size() > limit:
+		components.resize(limit)
+	return components
+
+func _best_peak_in_component(
+	map_data: MapData,
+	component_points: Array,
+	rng: RandomNumberGenerator,
+	keep_corridor_mask: Dictionary,
+	center_dist: Array[int],
+	entry_dist: Array[int],
+	occupied_dist: Array[int],
+	selected: Array[Dictionary]
+) -> Dictionary:
+	var best_peak: Dictionary = {}
+	var best_score: float = -1_000_000.0
+	for point_variant in component_points:
+		var point: Vector2i = point_variant
+		if keep_corridor_mask.has(point):
+			continue
+		if _near_selected_peak(point, selected, 14):
+			continue
+		if (point.x % 2) != 0 or (point.y % 2) != 0:
+			continue
+		var index: int = map_data.index_of(point.x, point.y)
+		var d_center: int = center_dist[index]
+		var d_entry: int = entry_dist[index]
+		var d_occ: int = occupied_dist[index]
+		if d_occ < 6:
+			continue
+		var score: float = (float(d_occ) * 0.56) + (float(d_center) * 0.27) + (float(d_entry) * 0.17)
+		if point.x < 8 or point.y < 8 or point.x > map_data.width - 9 or point.y > map_data.height - 9:
+			score *= 0.82
+		score += rng.randf_range(-0.9, 0.9)
+		if score > best_score:
+			best_score = score
+			best_peak = {
+				"point": point,
+				"score": score,
+				"d_occ": d_occ,
+			}
+	if not best_peak.is_empty():
+		return best_peak
+	for point_variant in component_points:
+		var point: Vector2i = point_variant
+		if _near_selected_peak(point, selected, 12):
+			continue
+		var index: int = map_data.index_of(point.x, point.y)
+		var d_occ: int = occupied_dist[index]
+		if d_occ < 4:
+			continue
+		return {
+			"point": point,
+			"score": float(d_occ),
+			"d_occ": d_occ,
+		}
+	return {}
 
 func _build_filler_shape(
 	map_data: MapData,
@@ -278,3 +374,14 @@ func _stamp_mask(mask: Dictionary, center: Vector2i, radius: int, map_data: MapD
 			var point := Vector2i(x, y)
 			if Vector2(point).distance_to(Vector2(center)) <= float(r) + 0.2:
 				mask[point] = true
+
+func _is_open_candidate_tile(tile) -> bool:
+	if tile == null:
+		return false
+	if tile.region_type == MapTypes.RegionType.CENTER_CLEARING:
+		return false
+	if tile.is_road or tile.is_water or tile.is_blocked:
+		return false
+	if tile.base_terrain_type == MapTypes.TerrainType.FOREST or tile.base_terrain_type == MapTypes.TerrainType.ROCK:
+		return false
+	return true

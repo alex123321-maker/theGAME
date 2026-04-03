@@ -17,18 +17,23 @@ func generate(map_data: MapData, rng: RandomNumberGenerator, config, composition
 		var core_points: Array[Vector2i] = []
 		match shape:
 			"spine":
-				core_points = _generate_spine_mass(map_data, world_anchor, center, blocker_spec, rng)
+				core_points = _generate_spine_mass(map_data, world_anchor, center, blocker_spec, rng, blocker_type)
 			"metaball":
-				core_points = _generate_metaball_mass(map_data, world_anchor, center, blocker_spec, rng)
+				core_points = _generate_metaball_mass(map_data, world_anchor, center, blocker_spec, rng, blocker_type)
 			_:
-				core_points = _generate_metaball_mass(map_data, world_anchor, center, blocker_spec, rng)
+				core_points = _generate_metaball_mass(map_data, world_anchor, center, blocker_spec, rng, blocker_type)
 
 		core_points = _sanitize_points(map_data, core_points, keep_corridor_mask)
-		core_points = _extract_largest_component(core_points)
+		var preserve_disconnected_clusters: bool = blocker_type == MapTypes.BlockerType.FOREST and bool(blocker_spec.get("allow_disconnected_clusters", false))
+		if preserve_disconnected_clusters:
+			var min_component_tiles: int = max(6, int(blocker_spec.get("min_component_tiles", 10)))
+			core_points = _extract_components_above_size(core_points, min_component_tiles)
+		else:
+			core_points = _extract_largest_component(core_points)
 		if core_points.size() < max(24, int(config.min_blocker_area / 6)):
 			continue
 
-		var edge_band: int = maxi(1, int(blocker_spec.get("edge_band", 1)))
+		var edge_band: int = maxi(0, int(blocker_spec.get("edge_band", 1)))
 		var fringe_points: Array[Vector2i] = _build_fringe_points(map_data, core_points, edge_band, keep_corridor_mask)
 		var region_id: int = int(blocker_spec.get("region_id", 200))
 		map_data.register_region(
@@ -50,7 +55,8 @@ func _generate_spine_mass(
 	anchor: Vector2,
 	center: Vector2,
 	spec: Dictionary,
-	rng: RandomNumberGenerator
+	rng: RandomNumberGenerator,
+	blocker_type: int
 ) -> Array[Vector2i]:
 	var segments_min: int = int(spec.get("segments_min", 2))
 	var segments_max: int = max(segments_min, int(spec.get("segments_max", 5)))
@@ -90,7 +96,13 @@ func _generate_spine_mass(
 		var width: float = base_width * (0.78 + (sin(t * PI) * 0.34) + rng.randf_range(-0.12, 0.12))
 		_stamp_disc(selected, point, width, map_data)
 
-	selected = _roughen_mass(selected, float(spec.get("jitter", 0.16)), map_data, int(anchor.x * 17.0 + anchor.y * 23.0))
+	selected = _roughen_mass(
+		selected,
+		float(spec.get("jitter", 0.16)),
+		map_data,
+		int(anchor.x * 17.0 + anchor.y * 23.0),
+		blocker_type
+	)
 	var points: Array[Vector2i] = []
 	points.assign(selected.keys())
 	return points
@@ -100,7 +112,8 @@ func _generate_metaball_mass(
 	anchor: Vector2,
 	center: Vector2,
 	spec: Dictionary,
-	rng: RandomNumberGenerator
+	rng: RandomNumberGenerator,
+	blocker_type: int
 ) -> Array[Vector2i]:
 	var blobs_min: int = int(spec.get("blob_count_min", 2))
 	var blobs_max: int = max(blobs_min, int(spec.get("blob_count_max", 5)))
@@ -131,15 +144,55 @@ func _generate_metaball_mass(
 		var nucleus_radius: float = float(nucleus["radius"])
 		_stamp_disc(selected, Vector2i(roundi(nucleus_center.x), roundi(nucleus_center.y)), nucleus_radius, map_data)
 
-	for i in range(1, nuclei.size()):
-		var prev_center: Vector2 = Vector2(nuclei[i - 1]["center"])
-		var current_center: Vector2 = Vector2(nuclei[i]["center"])
-		var link_radius: float = minf(float(nuclei[i - 1]["radius"]), float(nuclei[i]["radius"])) * rng.randf_range(0.42, 0.66)
-		var link_line: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([prev_center, current_center])
-		for point in link_line:
-			_stamp_disc(selected, point, link_radius, map_data)
+	var allow_disconnected_clusters: bool = bool(spec.get("allow_disconnected_clusters", false))
+	var connect_nuclei_chance: float = clampf(float(spec.get("connect_nuclei_chance", 1.0)), 0.0, 1.0)
+	var max_links: int = int(spec.get("max_links", nuclei.size() - 1))
+	if max_links < 0:
+		max_links = 0
+	var links_used: int = 0
+	if connect_nuclei_chance > 0.0 and max_links > 0:
+		var link_candidates: Array[Dictionary] = []
+		for i in range(nuclei.size()):
+			for j in range(i + 1, nuclei.size()):
+				var first_center: Vector2 = Vector2(nuclei[i]["center"])
+				var second_center: Vector2 = Vector2(nuclei[j]["center"])
+				link_candidates.append({
+					"from": i,
+					"to": j,
+					"distance": first_center.distance_to(second_center),
+				})
+		link_candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return float(a.get("distance", 999999.0)) < float(b.get("distance", 999999.0))
+		)
+		for link in link_candidates:
+			if links_used >= max_links:
+				break
+			if rng.randf() > connect_nuclei_chance:
+				continue
+			var from_index: int = int(link.get("from", 0))
+			var to_index: int = int(link.get("to", 0))
+			var from_center: Vector2 = Vector2(nuclei[from_index]["center"])
+			var to_center: Vector2 = Vector2(nuclei[to_index]["center"])
+			var link_radius: float = minf(float(nuclei[from_index]["radius"]), float(nuclei[to_index]["radius"])) * rng.randf_range(0.38, 0.62)
+			var link_line: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([from_center, to_center])
+			for point in link_line:
+				_stamp_disc(selected, point, link_radius, map_data)
+			links_used += 1
+	if not allow_disconnected_clusters and nuclei.size() > 1 and links_used == 0:
+		var fallback_from: Vector2 = Vector2(nuclei[0]["center"])
+		var fallback_to: Vector2 = Vector2(nuclei[1]["center"])
+		var fallback_radius: float = minf(float(nuclei[0]["radius"]), float(nuclei[1]["radius"])) * 0.5
+		var fallback_line: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([fallback_from, fallback_to])
+		for point in fallback_line:
+			_stamp_disc(selected, point, fallback_radius, map_data)
 
-	selected = _roughen_mass(selected, float(spec.get("jitter", 0.24)), map_data, int(anchor.x * 29.0 + anchor.y * 31.0))
+	selected = _roughen_mass(
+		selected,
+		float(spec.get("jitter", 0.24)),
+		map_data,
+		int(anchor.x * 29.0 + anchor.y * 31.0),
+		blocker_type
+	)
 	var points: Array[Vector2i] = []
 	points.assign(selected.keys())
 	return points
@@ -257,29 +310,38 @@ func _stamp_fringe_tiles(map_data: MapData, points: Array[Vector2i], region_id: 
 			continue
 		if tile.is_blocked:
 			continue
-		tile.base_terrain_type = _terrain_for_blocker(blocker_type)
-		tile.terrain_type = _terrain_for_blocker(blocker_type)
-		tile.blocker_type = blocker_type
 		tile.region_id = region_id
 		tile.region_type = MapTypes.RegionType.BLOCKER_MASS
 		tile.is_buildable = false
 		tile.is_future_wallable = false
 		tile.is_water = false
-		tile.resource_tag = _resource_for_blocker(blocker_type)
 		match blocker_type:
 			MapTypes.BlockerType.FOREST:
+				tile.base_terrain_type = MapTypes.TerrainType.FOREST
+				tile.terrain_type = MapTypes.TerrainType.FOREST
+				tile.blocker_type = MapTypes.BlockerType.FOREST
+				tile.resource_tag = MapTypes.ResourceTag.WOOD
 				tile.is_walkable = true
 				tile.is_blocked = false
 				tile.walk_cost = 2.35
 				if not tile.debug_tags.has("forest_fringe"):
 					tile.debug_tags.append("forest_fringe")
 			MapTypes.BlockerType.ROCK:
+				tile.base_terrain_type = MapTypes.TerrainType.GROUND
+				tile.terrain_type = MapTypes.TerrainType.GROUND
+				tile.blocker_type = MapTypes.BlockerType.NONE
+				tile.resource_tag = MapTypes.ResourceTag.STONE
+				tile.transition_type = MapTypes.TransitionType.BLOCKER_EDGE
 				tile.is_walkable = true
 				tile.is_blocked = false
 				tile.walk_cost = 4.40
 				if not tile.debug_tags.has("rock_edge"):
 					tile.debug_tags.append("rock_edge")
 			_:
+				tile.base_terrain_type = _terrain_for_blocker(blocker_type)
+				tile.terrain_type = _terrain_for_blocker(blocker_type)
+				tile.blocker_type = blocker_type
+				tile.resource_tag = _resource_for_blocker(blocker_type)
 				tile.is_walkable = false
 				tile.is_blocked = false
 				tile.walk_cost = 6.0
@@ -326,7 +388,7 @@ func _stamp_mask(mask: Dictionary, center: Vector2i, radius: int, map_data: MapD
 			if Vector2(point).distance_to(Vector2(center)) <= float(r) + 0.35:
 				mask[point] = true
 
-func _roughen_mass(selected: Dictionary, jitter: float, map_data: MapData, salt: int) -> Dictionary:
+func _roughen_mass(selected: Dictionary, jitter: float, map_data: MapData, salt: int, blocker_type: int) -> Dictionary:
 	if selected.is_empty():
 		return selected
 	var result: Dictionary = selected.duplicate(true)
@@ -343,7 +405,16 @@ func _roughen_mass(selected: Dictionary, jitter: float, map_data: MapData, salt:
 			result.erase(point)
 	var points: Array[Vector2i] = []
 	points.assign(result.keys())
-	var smoothed: Array[Vector2i] = GenerationUtilsClass.smooth_points(map_data, points, 2, 2)
+	var smooth_iterations: int = 2
+	var smooth_neighbors: int = 2
+	match blocker_type:
+		MapTypes.BlockerType.ROCK:
+			smooth_iterations = 1
+			smooth_neighbors = 3
+		MapTypes.BlockerType.RAVINE:
+			smooth_iterations = 1
+			smooth_neighbors = 2
+	var smoothed: Array[Vector2i] = GenerationUtilsClass.smooth_points(map_data, points, smooth_iterations, smooth_neighbors)
 	var output := {}
 	for point in smoothed:
 		output[point] = true
@@ -375,6 +446,39 @@ func _extract_largest_component(points: Array[Vector2i]) -> Array[Vector2i]:
 		if component.size() > best_component.size():
 			best_component = component
 	return best_component
+
+func _extract_components_above_size(points: Array[Vector2i], min_size: int) -> Array[Vector2i]:
+	if points.is_empty():
+		return []
+	var selected := {}
+	for point in points:
+		selected[point] = true
+	var visited := {}
+	var preserved := {}
+	for key in selected.keys():
+		var point: Vector2i = key
+		if visited.has(point):
+			continue
+		var component: Array[Vector2i] = []
+		var frontier: Array[Vector2i] = [point]
+		visited[point] = true
+		while not frontier.is_empty():
+			var current: Vector2i = frontier.pop_front()
+			component.append(current)
+			for neighbor in GenerationUtilsClass.cardinal_neighbors(current):
+				if visited.has(neighbor):
+					continue
+				if not selected.has(neighbor):
+					continue
+				visited[neighbor] = true
+				frontier.append(neighbor)
+		if component.size() < min_size:
+			continue
+		for item in component:
+			preserved[item] = true
+	var output: Array[Vector2i] = []
+	output.assign(preserved.keys())
+	return output
 
 func _clamp_world(point: Vector2, map_data: MapData) -> Vector2:
 	return Vector2(

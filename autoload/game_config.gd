@@ -30,7 +30,6 @@ const OVERLAY_MODES: Array[String] = [
 	"roads",
 	"water",
 	"blockers",
-	"height",
 	"buildable",
 	"validation",
 ]
