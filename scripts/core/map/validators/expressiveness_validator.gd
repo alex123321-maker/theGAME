@@ -8,6 +8,9 @@ func evaluate(map_data: MapData) -> Dictionary:
 		"obstacle_area_max": 0,
 		"obstacle_area_avg": 0.0,
 		"obstacle_area_cv": 0.0,
+		"largest_open_region_ratio": 0.0,
+		"occupied_quadrants": 0,
+		"obstacle_centroid_dispersion": 0.0,
 		"narrow_passage_count": 0,
 		"passage_width_histogram": {"1": 0, "2": 0, "3": 0, "4+": 0},
 		"mean_entry_path_curviness": 0.0,
@@ -29,10 +32,13 @@ func evaluate(map_data: MapData) -> Dictionary:
 		metrics["obstacle_area_max"] = _array_max(area_values)
 		metrics["obstacle_area_avg"] = _array_mean(area_values)
 		metrics["obstacle_area_cv"] = _array_coefficient_variation(area_values)
+		metrics["obstacle_centroid_dispersion"] = _obstacle_centroid_dispersion(map_data, obstacle_components)
 
 	metrics["obstacle_perimeter_area_ratio"] = _obstacle_perimeter_area_ratio(map_data)
 	metrics["quadrant_asymmetry"] = _quadrant_asymmetry(map_data)
 	metrics["flank_count"] = _flank_count(map_data)
+	metrics["largest_open_region_ratio"] = _largest_open_region_ratio(map_data)
+	metrics["occupied_quadrants"] = _occupied_quadrants(map_data)
 	metrics["passage_width_histogram"] = _passage_width_histogram(map_data)
 	metrics["narrow_passage_count"] = _narrow_passage_count(map_data)
 
@@ -54,6 +60,12 @@ func evaluate(map_data: MapData) -> Dictionary:
 		warnings.append("obstacle_silhouette_too_soft")
 	if int(metrics["flank_count"]) < 2:
 		warnings.append("insufficient_flank_diversity")
+	if float(metrics["largest_open_region_ratio"]) > 0.35:
+		warnings.append("largest_open_region_too_large")
+	if int(metrics["occupied_quadrants"]) < 3:
+		warnings.append("occupied_quadrants_below_target")
+	if float(metrics["obstacle_centroid_dispersion"]) < 0.22:
+		warnings.append("obstacle_centroids_too_clustered")
 	if warnings.size() >= 5:
 		errors.append("expressiveness_below_threshold")
 
@@ -108,6 +120,76 @@ func _obstacle_perimeter_area_ratio(map_data: MapData) -> float:
 			if neighbor == null or not _is_obstacle_tile(neighbor):
 				perimeter += 1
 	return 0.0 if area <= 0 else float(perimeter) / float(area)
+
+func _largest_open_region_ratio(map_data: MapData) -> float:
+	var visited := {}
+	var total_open: int = 0
+	var largest_open: int = 0
+	for tile in map_data.tiles:
+		var point := Vector2i(tile.x, tile.y)
+		if visited.has(point):
+			continue
+		if not _is_open_tile(tile):
+			continue
+		var component_size: int = 0
+		var frontier: Array[Vector2i] = [point]
+		visited[point] = true
+		while not frontier.is_empty():
+			var current: Vector2i = frontier.pop_front()
+			component_size += 1
+			for neighbor in [current + Vector2i.LEFT, current + Vector2i.RIGHT, current + Vector2i.UP, current + Vector2i.DOWN]:
+				if visited.has(neighbor):
+					continue
+				if not map_data.is_in_bounds(neighbor.x, neighbor.y):
+					continue
+				var next_tile = map_data.get_tile(neighbor.x, neighbor.y)
+				if not _is_open_tile(next_tile):
+					continue
+				visited[neighbor] = true
+				frontier.append(neighbor)
+		total_open += component_size
+		largest_open = maxi(largest_open, component_size)
+	return 0.0 if total_open <= 0 else float(largest_open) / float(total_open)
+
+func _occupied_quadrants(map_data: MapData) -> int:
+	var mid_x: int = map_data.width / 2
+	var mid_y: int = map_data.height / 2
+	var occupied := {}
+	for tile in map_data.tiles:
+		if not _is_feature_tile(tile):
+			continue
+		var right: bool = tile.x >= mid_x
+		var bottom: bool = tile.y >= mid_y
+		var quadrant: int = 0
+		if right and not bottom:
+			quadrant = 1
+		elif not right and bottom:
+			quadrant = 2
+		elif right and bottom:
+			quadrant = 3
+		occupied[quadrant] = true
+	return occupied.size()
+
+func _obstacle_centroid_dispersion(map_data: MapData, components: Array) -> float:
+	if components.size() <= 1:
+		return 0.0
+	var centroids: Array[Vector2] = []
+	for component in components:
+		var sum := Vector2.ZERO
+		for point in component:
+			sum += Vector2(point)
+		centroids.append(sum / maxf(1.0, float(component.size())))
+	var total_distance: float = 0.0
+	var pairs: int = 0
+	for i in range(centroids.size()):
+		for j in range(i + 1, centroids.size()):
+			total_distance += centroids[i].distance_to(centroids[j])
+			pairs += 1
+	if pairs <= 0:
+		return 0.0
+	var mean_distance: float = total_distance / float(pairs)
+	var diagonal: float = Vector2(float(map_data.width), float(map_data.height)).length()
+	return mean_distance / maxf(1.0, diagonal)
 
 func _quadrant_asymmetry(map_data: MapData) -> float:
 	var mid_x: int = map_data.width / 2
@@ -292,6 +374,24 @@ func _is_obstacle_tile(tile) -> bool:
 	if tile.base_terrain_type == MapTypes.TerrainType.FOREST or tile.base_terrain_type == MapTypes.TerrainType.ROCK:
 		return true
 	return false
+
+func _is_open_tile(tile) -> bool:
+	if tile == null:
+		return false
+	if not tile.is_walkable or tile.is_water:
+		return false
+	if tile.is_road:
+		return false
+	return not _is_obstacle_tile(tile)
+
+func _is_feature_tile(tile) -> bool:
+	if tile == null:
+		return false
+	if tile.is_water:
+		return true
+	if _is_obstacle_tile(tile):
+		return true
+	return tile.debug_tags.has("soft_filler")
 
 func _array_min(values: Array[int]) -> int:
 	var result: int = values[0]

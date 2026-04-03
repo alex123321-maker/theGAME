@@ -16,8 +16,9 @@ func compose(map_data: MapData, rng: RandomNumberGenerator, config) -> Dictionar
 		(float(map_data.height) * 0.5) + (center_offset.y * float(map_data.height) * 0.20)
 	)
 	var entries: Array[Dictionary] = _build_entries(chosen, map_data, rng, config)
-	var blockers: Array[Dictionary] = _build_blockers(chosen, rng, config)
-	var water: Variant = _build_water_profile(chosen, rng)
+	var blocker_report: Dictionary = _build_blockers(chosen, rng, config)
+	var blockers: Array[Dictionary] = blocker_report.get("all", [])
+	var water: Variant = _build_water_profile(chosen, rng, blockers, entries, map_data)
 	var corridor_range: Vector2i = chosen.get("corridor_width_range", Vector2i(3, 5))
 	var corridor_width: int = rng.randi_range(
 		mini(corridor_range.x, corridor_range.y),
@@ -30,6 +31,8 @@ func compose(map_data: MapData, rng: RandomNumberGenerator, config) -> Dictionar
 		"center": center,
 		"entries": entries,
 		"blockers": blockers,
+		"primary_blocker_count": int(blocker_report.get("primary_count", 0)),
+		"satellite_blocker_count": int(blocker_report.get("satellite_count", 0)),
 		"water": water,
 		"corridor_width": corridor_width,
 		"corridor_buffer": int(chosen.get("corridor_buffer", 1)),
@@ -87,53 +90,257 @@ func _build_entries(family: Dictionary, map_data: MapData, rng: RandomNumberGene
 		})
 	return entries
 
-func _build_blockers(family: Dictionary, rng: RandomNumberGenerator, config) -> Array[Dictionary]:
-	var blockers: Array[Dictionary] = []
-	var motifs: Array = family.get("blocker_motifs", [])
-	var shuffled_motifs: Array = motifs.duplicate(true)
-	_shuffle(shuffled_motifs, rng)
-	if shuffled_motifs.is_empty():
-		return blockers
-	var blocker_target: int = clampi(config.blocker_count, 1, shuffled_motifs.size())
-	for index in range(blocker_target):
-		var motif: Dictionary = shuffled_motifs[index].duplicate(true)
-		var anchor_min: Vector2 = motif.get("anchor_min", Vector2(0.20, 0.20))
-		var anchor_max: Vector2 = motif.get("anchor_max", Vector2(0.80, 0.80))
-		motif["anchor"] = _random_vec2(anchor_min, anchor_max, rng)
-		motif["aggression"] = _random_float(
-			float(motif.get("aggression_min", 0.35)),
-			float(motif.get("aggression_max", 0.75)),
-			rng
-		)
-		motif["size_bias"] = _random_float(
-			float(motif.get("size_bias_min", 0.9)),
-			float(motif.get("size_bias_max", 1.2)),
-			rng
-		)
-		motif["region_id"] = 200 + index
-		blockers.append(motif)
-	return blockers
+func _build_blockers(family: Dictionary, rng: RandomNumberGenerator, config) -> Dictionary:
+	var primary_specs: Array = _primary_motifs(family)
+	var satellite_specs: Array = _satellite_motifs(family, primary_specs)
+	var selected_primary: Array[Dictionary] = []
+	var selected_satellite: Array[Dictionary] = []
+	var all_blockers: Array[Dictionary] = []
+	var region_counter: int = 200
 
-func _build_water_profile(family: Dictionary, rng: RandomNumberGenerator) -> Variant:
-	var profile: Dictionary = family.get("water_profile", {})
-	if profile.is_empty():
-		return null
-	if not bool(profile.get("enabled", true)):
-		return null
-	var anchor_min: Vector2 = profile.get("anchor_min", Vector2(0.72, 0.18))
-	var anchor_max: Vector2 = profile.get("anchor_max", Vector2(0.88, 0.34))
+	if not primary_specs.is_empty():
+		var shuffled_primary: Array = primary_specs.duplicate(true)
+		_shuffle(shuffled_primary, rng)
+		var primary_target: int = clampi(config.blocker_count, 1, mini(2, shuffled_primary.size()))
+		for index in range(primary_target):
+			var primary := _realize_motif(shuffled_primary[index], rng, region_counter, "primary")
+			region_counter += 1
+			selected_primary.append(primary)
+			all_blockers.append(primary)
+
+	if not satellite_specs.is_empty():
+		var sat_min: int = int(family.get("satellite_count_min", 1))
+		var sat_max: int = max(sat_min, int(family.get("satellite_count_max", 3)))
+		var sat_target: int = rng.randi_range(sat_min, sat_max)
+		var satellite_candidates: Array = _satellite_candidates(satellite_specs, selected_primary)
+		_shuffle(satellite_candidates, rng)
+		for candidate in satellite_candidates:
+			if selected_satellite.size() >= sat_target:
+				break
+			var motif := _realize_motif(candidate, rng, region_counter, "satellite")
+			region_counter += 1
+			if _too_close_to_existing(motif, all_blockers, 0.18):
+				continue
+			selected_satellite.append(motif)
+			all_blockers.append(motif)
+
 	return {
-		"style": String(profile.get("style", "soft_basin")),
-		"anchor": _random_vec2(anchor_min, anchor_max, rng),
+		"primary_count": selected_primary.size(),
+		"satellite_count": selected_satellite.size(),
+		"all": all_blockers,
+	}
+
+func _build_water_profile(
+	family: Dictionary,
+	rng: RandomNumberGenerator,
+	blockers: Array[Dictionary],
+	entries: Array[Dictionary],
+	map_data: MapData
+) -> Variant:
+	var policy: Dictionary = family.get("water_policy", {})
+	var legacy_profile: Dictionary = family.get("water_profile", {})
+	if policy.is_empty():
+		policy = legacy_profile.duplicate(true)
+	if not bool(policy.get("enabled", true)):
+		return null
+	var sector: int = _pick_water_sector(blockers, entries, rng, map_data.width, map_data.height)
+	var sector_ranges: Array[Vector2] = _sector_anchor_ranges(sector)
+	var anchor_min: Vector2 = sector_ranges[0]
+	var anchor_max: Vector2 = sector_ranges[1]
+	var anchor := _random_vec2(anchor_min, anchor_max, rng)
+	var center_pull: float = clampf(float(policy.get("center_pull", 0.08)), 0.0, 0.25)
+	anchor = anchor.lerp(Vector2(0.5, 0.5), center_pull * rng.randf_range(0.0, 0.8))
+	var anchor_jitter: float = float(policy.get("anchor_jitter", 0.06))
+	anchor.x = clampf(anchor.x + rng.randf_range(-anchor_jitter, anchor_jitter), 0.08, 0.92)
+	anchor.y = clampf(anchor.y + rng.randf_range(-anchor_jitter, anchor_jitter), 0.08, 0.92)
+	var basins_min: int = int(policy.get("basins_min", 1))
+	var basins_max: int = max(basins_min, int(policy.get("basins_max", 2)))
+	return {
+		"style": String(policy.get("style", "soft_basin")),
+		"anchor": anchor,
+		"sector": sector,
 		"size_bias": _random_float(
-			float(profile.get("size_bias_min", 0.85)),
-			float(profile.get("size_bias_max", 1.10)),
+			float(policy.get("size_bias_min", 0.78)),
+			float(policy.get("size_bias_max", 1.08)),
 			rng
 		),
-		"basins_min": int(profile.get("basins_min", 1)),
-		"basins_max": int(profile.get("basins_max", 2)),
-		"jitter": float(profile.get("jitter", 0.16)),
+		"basins_min": basins_min,
+		"basins_max": basins_max,
+		"jitter": float(policy.get("jitter", 0.16)),
 	}
+
+func _primary_motifs(family: Dictionary) -> Array:
+	if family.has("primary_motifs"):
+		return Array(family.get("primary_motifs", [])).duplicate(true)
+	var motifs: Array = family.get("blocker_motifs", [])
+	if motifs.is_empty():
+		return []
+	var target: int = mini(2, motifs.size())
+	var primary: Array = []
+	for i in range(target):
+		primary.append(motifs[i].duplicate(true))
+	return primary
+
+func _satellite_motifs(family: Dictionary, primary_motifs: Array) -> Array:
+	if family.has("satellite_motifs"):
+		return Array(family.get("satellite_motifs", [])).duplicate(true)
+	var motifs: Array = family.get("blocker_motifs", [])
+	var satellites: Array = []
+	for i in range(primary_motifs.size(), motifs.size()):
+		satellites.append(motifs[i].duplicate(true))
+	if satellites.is_empty():
+		satellites = _default_satellite_motifs()
+	return satellites
+
+func _default_satellite_motifs() -> Array:
+	return [
+		{
+			"kind": MapTypes.BlockerType.FOREST,
+			"shape": "metaball",
+			"anchor_min": Vector2(0.12, 0.12),
+			"anchor_max": Vector2(0.34, 0.34),
+			"blob_count_min": 2,
+			"blob_count_max": 3,
+			"radius_min": 3.0,
+			"radius_max": 5.8,
+			"edge_band": 1,
+			"size_bias_min": 0.80,
+			"size_bias_max": 0.98,
+			"aggression_min": 0.28,
+			"aggression_max": 0.58,
+		},
+		{
+			"kind": MapTypes.BlockerType.ROCK,
+			"shape": "spine",
+			"anchor_min": Vector2(0.66, 0.14),
+			"anchor_max": Vector2(0.88, 0.36),
+			"length_min": 10,
+			"length_max": 20,
+			"thickness_min": 1.8,
+			"thickness_max": 3.4,
+			"segments_min": 2,
+			"segments_max": 3,
+			"edge_band": 1,
+			"size_bias_min": 0.74,
+			"size_bias_max": 0.94,
+			"aggression_min": 0.24,
+			"aggression_max": 0.54,
+		},
+		{
+			"kind": MapTypes.BlockerType.FOREST,
+			"shape": "metaball",
+			"anchor_min": Vector2(0.60, 0.62),
+			"anchor_max": Vector2(0.90, 0.90),
+			"blob_count_min": 2,
+			"blob_count_max": 4,
+			"radius_min": 2.8,
+			"radius_max": 6.0,
+			"edge_band": 1,
+			"size_bias_min": 0.76,
+			"size_bias_max": 1.02,
+			"aggression_min": 0.24,
+			"aggression_max": 0.56,
+		},
+	]
+
+func _satellite_candidates(satellite_specs: Array, selected_primary: Array[Dictionary]) -> Array:
+	var primary_quadrants := {}
+	for primary in selected_primary:
+		var anchor: Vector2 = primary.get("anchor", Vector2(0.5, 0.5))
+		primary_quadrants[_anchor_quadrant(anchor)] = true
+	var preferred: Array = []
+	var fallback: Array = []
+	for spec in satellite_specs:
+		var candidate: Dictionary = spec.duplicate(true)
+		var min_anchor: Vector2 = candidate.get("anchor_min", Vector2(0.16, 0.16))
+		var max_anchor: Vector2 = candidate.get("anchor_max", Vector2(0.84, 0.84))
+		var mid_anchor: Vector2 = (min_anchor + max_anchor) * 0.5
+		var quadrant: int = _anchor_quadrant(mid_anchor)
+		if primary_quadrants.has(quadrant):
+			fallback.append(candidate)
+		else:
+			preferred.append(candidate)
+	preferred.append_array(fallback)
+	return preferred
+
+func _realize_motif(source: Dictionary, rng: RandomNumberGenerator, region_id: int, motif_role: String) -> Dictionary:
+	var motif: Dictionary = source.duplicate(true)
+	var anchor_min: Vector2 = motif.get("anchor_min", Vector2(0.20, 0.20))
+	var anchor_max: Vector2 = motif.get("anchor_max", Vector2(0.80, 0.80))
+	motif["anchor"] = _random_vec2(anchor_min, anchor_max, rng)
+	motif["aggression"] = _random_float(
+		float(motif.get("aggression_min", 0.35)),
+		float(motif.get("aggression_max", 0.75)),
+		rng
+	)
+	motif["size_bias"] = _random_float(
+		float(motif.get("size_bias_min", 0.9)),
+		float(motif.get("size_bias_max", 1.2)),
+		rng
+	)
+	motif["region_id"] = region_id
+	motif["motif_role"] = motif_role
+	return motif
+
+func _too_close_to_existing(candidate: Dictionary, existing: Array[Dictionary], min_distance: float) -> bool:
+	var anchor: Vector2 = candidate.get("anchor", Vector2(0.5, 0.5))
+	for item in existing:
+		var other_anchor: Vector2 = item.get("anchor", Vector2(0.5, 0.5))
+		if anchor.distance_to(other_anchor) < min_distance:
+			return true
+	return false
+
+func _pick_water_sector(
+	blockers: Array[Dictionary],
+	entries: Array[Dictionary],
+	rng: RandomNumberGenerator,
+	map_width: int,
+	map_height: int
+) -> int:
+	var sector_weights: Array[float] = [1.0, 1.0, 1.0, 1.0]
+	for blocker in blockers:
+		var anchor: Vector2 = blocker.get("anchor", Vector2(0.5, 0.5))
+		var sector: int = _anchor_quadrant(anchor)
+		sector_weights[sector] -= 0.35
+	for entry in entries:
+		var point: Vector2i = entry.get("point", Vector2i.ZERO)
+		var normalized := Vector2(
+			float(point.x) / maxf(1.0, float(map_width - 1)),
+			float(point.y) / maxf(1.0, float(map_height - 1))
+		)
+		var sector: int = _anchor_quadrant(normalized)
+		sector_weights[sector] -= 0.15
+	var best_sector: int = 0
+	var best_weight: float = sector_weights[0]
+	for i in range(1, sector_weights.size()):
+		if sector_weights[i] > best_weight:
+			best_weight = sector_weights[i]
+			best_sector = i
+	if rng.randf() < 0.22:
+		return rng.randi_range(0, 3)
+	return best_sector
+
+func _sector_anchor_ranges(sector: int) -> Array[Vector2]:
+	match sector:
+		0:
+			return [Vector2(0.10, 0.10), Vector2(0.38, 0.38)]
+		1:
+			return [Vector2(0.62, 0.10), Vector2(0.90, 0.38)]
+		2:
+			return [Vector2(0.10, 0.62), Vector2(0.38, 0.90)]
+		_:
+			return [Vector2(0.62, 0.62), Vector2(0.90, 0.90)]
+
+func _anchor_quadrant(anchor: Vector2) -> int:
+	var right: bool = anchor.x >= 0.5
+	var bottom: bool = anchor.y >= 0.5
+	if right and not bottom:
+		return 1
+	if not right and bottom:
+		return 2
+	if right and bottom:
+		return 3
+	return 0
 
 func _random_vec2(min_value: Vector2, max_value: Vector2, rng: RandomNumberGenerator) -> Vector2:
 	return Vector2(

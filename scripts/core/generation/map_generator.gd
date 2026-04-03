@@ -8,6 +8,7 @@ const LayoutComposerClass = preload("res://scripts/core/generation/layout_compos
 const RegionGeneratorClass = preload("res://scripts/core/generation/region_generator.gd")
 const BlockerGeneratorClass = preload("res://scripts/core/generation/blocker_generator.gd")
 const WaterGeneratorClass = preload("res://scripts/core/generation/water_generator.gd")
+const VoidFillerGeneratorClass = preload("res://scripts/core/generation/void_filler_generator.gd")
 const RoadGeneratorClass = preload("res://scripts/core/generation/road_generator.gd")
 const TransitionResolverClass = preload("res://scripts/core/generation/transition_resolver.gd")
 const MapValidatorClass = preload("res://scripts/core/map/map_validator.gd")
@@ -16,6 +17,7 @@ var _layout_composer := LayoutComposerClass.new()
 var _region_generator := RegionGeneratorClass.new()
 var _blocker_generator := BlockerGeneratorClass.new()
 var _water_generator := WaterGeneratorClass.new()
+var _void_filler_generator := VoidFillerGeneratorClass.new()
 var _road_generator := RoadGeneratorClass.new()
 var _transition_resolver := TransitionResolverClass.new()
 var _validator := MapValidatorClass.new()
@@ -35,6 +37,7 @@ func generate(seed: int, config: Dictionary) -> MapData:
 	_generate_clearing(map_data, rng, generation_config, composition)
 	_generate_major_blockers(map_data, rng, generation_config, composition)
 	_generate_water_body(map_data, rng, generation_config, composition)
+	_generate_void_fillers(map_data, rng, generation_config, composition)
 	_generate_entries(map_data, composition)
 	_generate_roads(map_data, rng, generation_config, composition)
 	_resolve_surface_transitions(map_data)
@@ -61,6 +64,9 @@ func _generate_major_blockers(map_data: MapData, rng: RandomNumberGenerator, con
 func _generate_water_body(map_data: MapData, rng: RandomNumberGenerator, config, composition: Dictionary) -> void:
 	_water_generator.generate(map_data, rng, config, composition)
 
+func _generate_void_fillers(map_data: MapData, rng: RandomNumberGenerator, config, composition: Dictionary) -> void:
+	_void_filler_generator.generate(map_data, rng, config, composition)
+
 func _generate_entries(map_data: MapData, composition: Dictionary) -> void:
 	for entry_spec in composition.get("entries", []):
 		var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
@@ -80,11 +86,15 @@ func _build_buildable_mask(map_data: MapData) -> void:
 
 func _build_generation_summary(map_data: MapData) -> Dictionary:
 	var blocker_regions: int = 0
+	var soft_filler_regions: int = 0
 	var water_regions: int = 0
 	for region in map_data.regions:
 		var region_type: int = int(region.get("type", MapTypes.RegionType.NONE))
 		if region_type == MapTypes.RegionType.BLOCKER_MASS:
-			blocker_regions += 1
+			if bool(region.get("metadata", {}).get("soft", false)):
+				soft_filler_regions += 1
+			else:
+				blocker_regions += 1
 		elif region_type == MapTypes.RegionType.WATER_REGION:
 			water_regions += 1
 	var road_length_tiles: int = 0
@@ -96,6 +106,7 @@ func _build_generation_summary(map_data: MapData) -> Dictionary:
 		"entry_count": map_data.entry_points.size(),
 		"clearing_area": map_data.central_zone_tiles.size(),
 		"blocker_region_count": blocker_regions,
+		"soft_filler_region_count": soft_filler_regions,
 		"has_water": water_regions > 0,
 		"road_length_tiles": road_length_tiles,
 		"validation_ok": bool(map_data.validation_report.get("ok", false)),
