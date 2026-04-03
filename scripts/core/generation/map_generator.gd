@@ -99,4 +99,5 @@ func _build_generation_summary(map_data: MapData) -> Dictionary:
 		"has_water": water_regions > 0,
 		"road_length_tiles": road_length_tiles,
 		"validation_ok": bool(map_data.validation_report.get("ok", false)),
+		"validation_warning_count": Array(map_data.validation_report.get("warnings", [])).size(),
 	}

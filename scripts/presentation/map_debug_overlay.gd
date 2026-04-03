@@ -61,6 +61,10 @@ func _overlay_color(tile) -> Color:
 					return Color(0.81, 0.52, 0.30, 0.34)
 				MapTypes.TerrainType.WATER:
 					return Color(0.20, 0.45, 0.88, 0.34)
+				MapTypes.TerrainType.FOREST:
+					return Color(0.16, 0.42, 0.18, 0.34)
+				MapTypes.TerrainType.ROCK:
+					return Color(0.52, 0.52, 0.54, 0.34)
 				MapTypes.TerrainType.BLOCKER:
 					return Color(0.16, 0.24, 0.16, 0.34)
 				_:

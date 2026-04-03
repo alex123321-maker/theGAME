@@ -228,6 +228,7 @@ func _update_runtime_panel() -> void:
 func _format_validation_report(report: Dictionary) -> String:
 	var metrics: Dictionary = report.get("metrics", {})
 	var errors: Array = report.get("errors", [])
+	var warnings: Array = report.get("warnings", [])
 	var stages: Array = report.get("stages", [])
 	var summary: Dictionary = _map_data.generation_summary if _map_data != null else {}
 	var lines: Array[String] = []
@@ -250,6 +251,11 @@ func _format_validation_report(report: Dictionary) -> String:
 	else:
 		for item in errors:
 			lines.append("error: %s" % String(item))
+	if warnings.is_empty():
+		lines.append("warnings: none")
+	else:
+		for item in warnings:
+			lines.append("warning: %s" % String(item))
 	for stage in stages:
 		lines.append(
 			"stage[%s]=%s%s" % [

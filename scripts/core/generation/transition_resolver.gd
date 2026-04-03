@@ -5,7 +5,7 @@ func resolve(map_data: MapData) -> void:
 	for tile in map_data.tiles:
 		var road_sides: Dictionary = _side_flags(map_data, tile.x, tile.y, func(other) -> bool: return other.is_road)
 		var water_sides: Dictionary = _side_flags(map_data, tile.x, tile.y, func(other) -> bool: return other.is_water)
-		var blocker_sides: Dictionary = _side_flags(map_data, tile.x, tile.y, func(other) -> bool: return other.is_blocked)
+		var blocker_sides: Dictionary = _side_flags(map_data, tile.x, tile.y, func(other) -> bool: return _is_obstacle_tile(other))
 		var clearing_sides: Dictionary = _side_flags(map_data, tile.x, tile.y, func(other) -> bool: return other.base_terrain_type == MapTypes.TerrainType.CLEARING)
 		var flags := {
 			"near_road": _any_side(road_sides),
@@ -77,3 +77,14 @@ func _any_side(flags: Dictionary) -> bool:
 
 func _is_exposed(flags: Dictionary) -> bool:
 	return bool(flags.get("near_clearing", false)) or bool(flags.get("near_road", false))
+
+func _is_obstacle_tile(tile) -> bool:
+	if tile == null:
+		return false
+	if tile.is_blocked:
+		return true
+	if tile.terrain_type == MapTypes.TerrainType.FOREST or tile.terrain_type == MapTypes.TerrainType.ROCK:
+		return true
+	if tile.base_terrain_type == MapTypes.TerrainType.FOREST or tile.base_terrain_type == MapTypes.TerrainType.ROCK:
+		return true
+	return tile.blocker_type != MapTypes.BlockerType.NONE

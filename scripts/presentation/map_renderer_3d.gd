@@ -194,14 +194,30 @@ func _build_decor_layer() -> void:
 			continue
 		if tile.base_terrain_type == MapTypes.TerrainType.CLEARING:
 			continue
-		var hash_value: int = abs(int((tile.x * 92821) ^ (tile.y * 68917) ^ 177))
-		if (hash_value % 100) > 1:
+		var density: float = _decor_density(tile)
+		if density <= 0.0:
+			continue
+		var cluster_x: int = int(floor(float(tile.x) / 6.0))
+		var cluster_y: int = int(floor(float(tile.y) / 6.0))
+		var cluster_hash: int = abs(int((cluster_x * 92821) ^ (cluster_y * 68917) ^ (map_data.seed * 173)))
+		var local_hash: int = abs(int((tile.x * 12011) ^ (tile.y * 39119) ^ (map_data.seed * 137)))
+		var cluster_bonus: float = 0.0
+		if tile.base_terrain_type == MapTypes.TerrainType.FOREST and (cluster_hash % 100) < 68:
+			cluster_bonus = 0.12
+		elif tile.base_terrain_type == MapTypes.TerrainType.ROCK and (cluster_hash % 100) < 54:
+			cluster_bonus = 0.10
+		elif _is_near_road_tile(tile.x, tile.y) and (cluster_hash % 100) < 36:
+			cluster_bonus = 0.07
+		var threshold: int = int(clampf((density + cluster_bonus) * 100.0, 0.0, 92.0))
+		if (local_hash % 100) >= threshold:
 			continue
 		var mesh_instance := MeshInstance3D.new()
 		mesh_instance.mesh = _decor_mesh
-		mesh_instance.material_override = _material("decor", Color(0.42, 0.37, 0.30, 1.0), 0.08)
+		mesh_instance.material_override = _material("decor_%d" % tile.base_terrain_type, _decor_color(tile), 0.08)
 		mesh_instance.position = WorldGridProjection3DClass.logical_to_world(Vector2i(tile.x, tile.y), DECOR_Y)
-		mesh_instance.rotation.y = float(hash_value % 4) * (PI * 0.5)
+		mesh_instance.rotation.y = float(local_hash % 4) * (PI * 0.5)
+		var scale_jitter: float = 0.84 + (float(local_hash % 21) / 100.0)
+		mesh_instance.scale = Vector3.ONE * scale_jitter
 		_decor_root.add_child(mesh_instance)
 
 func _build_grid() -> void:
@@ -257,6 +273,10 @@ func _surface_color(tile) -> Color:
 			return Color(0.63, 0.55, 0.46, 1.0)
 		MapTypes.TerrainType.WATER:
 			return Color(0.12, 0.25, 0.42, 1.0)
+		MapTypes.TerrainType.FOREST:
+			return Color(0.24, 0.35, 0.23, 1.0)
+		MapTypes.TerrainType.ROCK:
+			return Color(0.42, 0.42, 0.44, 1.0)
 		MapTypes.TerrainType.BLOCKER:
 			match tile.blocker_type:
 				MapTypes.BlockerType.FOREST:
@@ -282,6 +302,10 @@ func _road_visual_width(width_cells: int) -> float:
 func _road_color(tile) -> Color:
 	if tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER:
 		return Color(0.66, 0.61, 0.50, 1.0)
+	if tile.base_terrain_type == MapTypes.TerrainType.FOREST:
+		return Color(0.42, 0.35, 0.24, 1.0)
+	if tile.base_terrain_type == MapTypes.TerrainType.ROCK:
+		return Color(0.58, 0.53, 0.46, 1.0)
 	if tile.base_terrain_type == MapTypes.TerrainType.BLOCKER:
 		match tile.blocker_type:
 			MapTypes.BlockerType.FOREST:
@@ -416,3 +440,34 @@ func _ensure_layer(node_name: String) -> Node3D:
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():
 		child.free()
+
+func _decor_density(tile) -> float:
+	if tile.base_terrain_type == MapTypes.TerrainType.FOREST:
+		return 0.14 if tile.debug_tags.has("forest_fringe") else 0.07
+	if tile.base_terrain_type == MapTypes.TerrainType.ROCK:
+		return 0.11 if tile.debug_tags.has("rock_edge") else 0.05
+	if _is_near_road_tile(tile.x, tile.y):
+		return 0.05
+	return 0.015
+
+func _decor_color(tile) -> Color:
+	match tile.base_terrain_type:
+		MapTypes.TerrainType.FOREST:
+			return Color(0.34, 0.30, 0.23, 1.0)
+		MapTypes.TerrainType.ROCK:
+			return Color(0.48, 0.44, 0.39, 1.0)
+		_:
+			return Color(0.42, 0.37, 0.30, 1.0)
+
+func _is_near_road_tile(x: int, y: int) -> bool:
+	if map_data == null:
+		return false
+	var directions: Array[Vector2i] = [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
+	for direction in directions:
+		var target: Vector2i = Vector2i(x, y) + direction
+		if not map_data.is_in_bounds(target.x, target.y):
+			continue
+		var tile = map_data.get_tile(target.x, target.y)
+		if tile != null and tile.is_road:
+			return true
+	return false

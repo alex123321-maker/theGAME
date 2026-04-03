@@ -2,9 +2,13 @@ extends RefCounted
 class_name MapValidator
 
 const GameConfigData = preload("res://autoload/game_config.gd")
+const ExpressivenessValidatorClass = preload("res://scripts/core/map/validators/expressiveness_validator.gd")
+
+var _expressiveness_validator := ExpressivenessValidatorClass.new()
 
 func validate(map_data: MapData) -> Dictionary:
 	var errors: Array[String] = []
+	var warnings: Array[String] = []
 	var stages: Array[Dictionary] = []
 	var metrics := {
 		"entry_count": map_data.entry_points.size(),
@@ -78,12 +82,33 @@ func validate(map_data: MapData) -> Dictionary:
 
 	if metrics["road_tile_count"] <= 0:
 		errors.append("missing_roads")
-	if map_data.generation_summary.get("has_water", false) and metrics["water_tile_count"] <= 0:
+	var expects_water: bool = false
+	for region in map_data.regions:
+		if int(region.get("type", MapTypes.RegionType.NONE)) == MapTypes.RegionType.WATER_REGION:
+			expects_water = true
+			break
+	if expects_water and metrics["water_tile_count"] <= 0:
 		errors.append("missing_water_region")
+
+	var expressiveness_report: Dictionary = _expressiveness_validator.evaluate(map_data)
+	var expressiveness_metrics: Dictionary = expressiveness_report.get("metrics", {})
+	var expressiveness_errors: Array = expressiveness_report.get("errors", [])
+	for key in expressiveness_metrics.keys():
+		metrics[key] = expressiveness_metrics[key]
+	for warning in expressiveness_report.get("warnings", []):
+		warnings.append(String(warning))
+	for issue in expressiveness_errors:
+		errors.append(String(issue))
+	stages.append({
+		"stage": "validate_expressiveness",
+		"ok": expressiveness_errors.is_empty(),
+		"reason": "" if expressiveness_errors.is_empty() else "expressiveness_below_threshold",
+	})
 
 	var report := {
 		"ok": errors.is_empty(),
 		"errors": errors,
+		"warnings": warnings,
 		"metrics": metrics,
 		"stages": stages,
 	}
