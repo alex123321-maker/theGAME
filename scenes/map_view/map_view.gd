@@ -242,6 +242,7 @@ func _format_validation_report(report: Dictionary) -> String:
 	lines.append("connected_center_tiles=%d" % int(metrics.get("connected_center_tiles", 0)))
 	lines.append("reachable_entries=%d" % int(metrics.get("reachable_entries", 0)))
 	lines.append("road_tiles=%d" % int(metrics.get("road_tile_count", 0)))
+	lines.append("bridge_tiles=%d" % int(metrics.get("bridge_tile_count", 0)))
 	lines.append("water_tiles=%d" % int(metrics.get("water_tile_count", 0)))
 	lines.append("blocker_tiles=%d" % int(metrics.get("blocker_tile_count", 0)))
 	lines.append("buildable_tiles=%d" % int(metrics.get("buildable_tiles", 0)))

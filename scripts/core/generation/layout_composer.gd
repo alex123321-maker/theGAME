@@ -101,7 +101,9 @@ func _build_blockers(family: Dictionary, rng: RandomNumberGenerator, config) -> 
 	if not primary_specs.is_empty():
 		var shuffled_primary: Array = primary_specs.duplicate(true)
 		_shuffle(shuffled_primary, rng)
-		var primary_target: int = clampi(config.blocker_count, 1, mini(2, shuffled_primary.size()))
+		var primary_target_min: int = clampi(int(family.get("primary_count_min", mini(2, shuffled_primary.size()))), 1, shuffled_primary.size())
+		var primary_target_max: int = clampi(int(family.get("primary_count_max", mini(3, shuffled_primary.size()))), primary_target_min, shuffled_primary.size())
+		var primary_target: int = clampi(maxi(config.blocker_count, primary_target_min), primary_target_min, primary_target_max)
 		for index in range(primary_target):
 			var primary := _realize_motif(shuffled_primary[index], rng, region_counter, "primary")
 			region_counter += 1
@@ -109,10 +111,11 @@ func _build_blockers(family: Dictionary, rng: RandomNumberGenerator, config) -> 
 			all_blockers.append(primary)
 
 	if not satellite_specs.is_empty():
-		var sat_min: int = int(family.get("satellite_count_min", 1))
-		var sat_max: int = max(sat_min, int(family.get("satellite_count_max", 3)))
+		var sat_min: int = int(family.get("satellite_count_min", 2))
+		var sat_max: int = max(sat_min, int(family.get("satellite_count_max", 4)))
 		var sat_target: int = rng.randi_range(sat_min, sat_max)
 		var satellite_candidates: Array = _satellite_candidates(satellite_specs, selected_primary)
+		satellite_candidates.append_array(_balance_satellite_specs(family, selected_primary, satellite_specs, rng))
 		_shuffle(satellite_candidates, rng)
 		for candidate in satellite_candidates:
 			if selected_satellite.size() >= sat_target:
@@ -145,8 +148,8 @@ func _build_water_profile(
 		return null
 	var sector: int = _pick_water_sector(blockers, entries, rng, map_data.width, map_data.height)
 	var sector_ranges: Array[Vector2] = _sector_anchor_ranges(sector)
-	var anchor_min: Vector2 = sector_ranges[0]
-	var anchor_max: Vector2 = sector_ranges[1]
+	var anchor_min: Vector2 = policy.get("anchor_min", sector_ranges[0])
+	var anchor_max: Vector2 = policy.get("anchor_max", sector_ranges[1])
 	var anchor := _random_vec2(anchor_min, anchor_max, rng)
 	var center_pull: float = clampf(float(policy.get("center_pull", 0.08)), 0.0, 0.25)
 	anchor = anchor.lerp(Vector2(0.5, 0.5), center_pull * rng.randf_range(0.0, 0.8))
@@ -156,7 +159,7 @@ func _build_water_profile(
 	var basins_min: int = int(policy.get("basins_min", 1))
 	var basins_max: int = max(basins_min, int(policy.get("basins_max", 2)))
 	return {
-		"style": String(policy.get("style", "soft_basin")),
+		"style": String(policy.get("style", "meandering_river")),
 		"anchor": anchor,
 		"sector": sector,
 		"size_bias": _random_float(
@@ -167,6 +170,13 @@ func _build_water_profile(
 		"basins_min": basins_min,
 		"basins_max": basins_max,
 		"jitter": float(policy.get("jitter", 0.16)),
+		"channel_width_min": float(policy.get("channel_width_min", 2.6)),
+		"channel_width_max": float(policy.get("channel_width_max", 4.8)),
+		"near_center_distance_min": float(policy.get("near_center_distance_min", 10.0)),
+		"near_center_distance_max": float(policy.get("near_center_distance_max", 18.0)),
+		"branch_chance": float(policy.get("branch_chance", 0.0)),
+		"flow_side_start": String(policy.get("flow_side_start", "")),
+		"flow_side_end": String(policy.get("flow_side_end", "")),
 	}
 
 func _primary_motifs(family: Dictionary) -> Array:
@@ -199,19 +209,19 @@ func _default_satellite_motifs() -> Array:
 			"shape": "metaball",
 			"anchor_min": Vector2(0.12, 0.12),
 			"anchor_max": Vector2(0.34, 0.34),
-			"blob_count_min": 2,
-			"blob_count_max": 3,
-			"radius_min": 3.0,
-			"radius_max": 5.8,
+			"blob_count_min": 3,
+			"blob_count_max": 5,
+			"radius_min": 4.2,
+			"radius_max": 7.4,
 			"edge_band": 1,
-			"size_bias_min": 0.80,
-			"size_bias_max": 0.98,
-			"aggression_min": 0.28,
-			"aggression_max": 0.58,
+			"size_bias_min": 0.88,
+			"size_bias_max": 1.12,
+			"aggression_min": 0.32,
+			"aggression_max": 0.62,
 			"allow_disconnected_clusters": true,
-			"connect_nuclei_chance": 0.32,
-			"max_links": 2,
-			"min_component_tiles": 9,
+			"connect_nuclei_chance": 0.44,
+			"max_links": 3,
+			"min_component_tiles": 12,
 		},
 		{
 			"kind": MapTypes.BlockerType.ROCK,
@@ -219,36 +229,54 @@ func _default_satellite_motifs() -> Array:
 			"ridge_profile": "thin",
 			"anchor_min": Vector2(0.66, 0.14),
 			"anchor_max": Vector2(0.88, 0.36),
-			"length_min": 10,
-			"length_max": 20,
-			"thickness_min": 1.8,
-			"thickness_max": 3.4,
-			"segments_min": 2,
-			"segments_max": 3,
+			"length_min": 18,
+			"length_max": 30,
+			"thickness_min": 2.2,
+			"thickness_max": 4.0,
+			"segments_min": 3,
+			"segments_max": 4,
 			"edge_band": 1,
-			"size_bias_min": 0.74,
-			"size_bias_max": 0.94,
-			"aggression_min": 0.24,
-			"aggression_max": 0.54,
+			"size_bias_min": 0.82,
+			"size_bias_max": 1.04,
+			"aggression_min": 0.28,
+			"aggression_max": 0.58,
 		},
 		{
 			"kind": MapTypes.BlockerType.FOREST,
 			"shape": "metaball",
 			"anchor_min": Vector2(0.60, 0.62),
 			"anchor_max": Vector2(0.90, 0.90),
-			"blob_count_min": 2,
-			"blob_count_max": 4,
-			"radius_min": 2.8,
-			"radius_max": 6.0,
+			"blob_count_min": 3,
+			"blob_count_max": 5,
+			"radius_min": 4.0,
+			"radius_max": 7.6,
 			"edge_band": 1,
-			"size_bias_min": 0.76,
-			"size_bias_max": 1.02,
-			"aggression_min": 0.24,
-			"aggression_max": 0.56,
+			"size_bias_min": 0.84,
+			"size_bias_max": 1.10,
+			"aggression_min": 0.28,
+			"aggression_max": 0.60,
 			"allow_disconnected_clusters": true,
-			"connect_nuclei_chance": 0.28,
-			"max_links": 2,
-			"min_component_tiles": 10,
+			"connect_nuclei_chance": 0.40,
+			"max_links": 3,
+			"min_component_tiles": 12,
+		},
+		{
+			"kind": MapTypes.BlockerType.ROCK,
+			"shape": "spine",
+			"ridge_profile": "grand",
+			"anchor_min": Vector2(0.14, 0.66),
+			"anchor_max": Vector2(0.34, 0.88),
+			"length_min": 28,
+			"length_max": 48,
+			"thickness_min": 2.8,
+			"thickness_max": 5.2,
+			"segments_min": 4,
+			"segments_max": 6,
+			"edge_band": 1,
+			"size_bias_min": 0.92,
+			"size_bias_max": 1.12,
+			"aggression_min": 0.32,
+			"aggression_max": 0.66,
 		},
 	]
 
@@ -290,9 +318,13 @@ func _realize_motif(source: Dictionary, rng: RandomNumberGenerator, region_id: i
 	if int(motif.get("kind", MapTypes.BlockerType.NONE)) == MapTypes.BlockerType.ROCK and String(motif.get("shape", "metaball")) == "spine":
 		if String(motif.get("ridge_profile", "")) == "thin":
 			_apply_thin_ridge_profile(motif, rng)
+		elif String(motif.get("ridge_profile", "")) == "grand":
+			_apply_grand_ridge_profile(motif, rng)
 	if int(motif.get("kind", MapTypes.BlockerType.NONE)) == MapTypes.BlockerType.FOREST and String(motif.get("shape", "metaball")) == "metaball":
 		var allow_disconnected: bool = bool(motif.get("allow_disconnected_clusters", motif_role == "satellite"))
 		motif["allow_disconnected_clusters"] = allow_disconnected
+		if String(motif.get("forest_profile", "")) == "canopy":
+			_apply_canopy_forest_profile(motif, rng)
 		if allow_disconnected:
 			if not motif.has("connect_nuclei_chance"):
 				motif["connect_nuclei_chance"] = _random_float(0.20, 0.40, rng)
@@ -317,6 +349,111 @@ func _apply_thin_ridge_profile(motif: Dictionary, rng: RandomNumberGenerator) ->
 		motif["edge_band"] = 0 if rng.randf() < 0.45 else 1
 	elif int(motif.get("edge_band", 1)) > 0 and rng.randf() < 0.35:
 		motif["edge_band"] = 0
+
+func _apply_grand_ridge_profile(motif: Dictionary, rng: RandomNumberGenerator) -> void:
+	motif["length_min"] = maxf(float(motif.get("length_min", 34.0)), 34.0)
+	motif["length_max"] = maxf(float(motif.get("length_max", 56.0)), 56.0)
+	motif["thickness_min"] = maxf(float(motif.get("thickness_min", 3.2)), 3.2)
+	motif["thickness_max"] = maxf(float(motif.get("thickness_max", 6.0)), 6.0)
+	motif["segments_min"] = maxi(int(motif.get("segments_min", 4)), 4)
+	motif["segments_max"] = maxi(int(motif.get("segments_max", 6)), 6)
+	motif["bend_min"] = minf(float(motif.get("bend_min", 0.12)), 0.12)
+	motif["bend_max"] = minf(float(motif.get("bend_max", 0.28)), 0.28)
+	motif["edge_band"] = maxi(1, int(motif.get("edge_band", 1)))
+	if rng.randf() < 0.35:
+		motif["size_bias"] = float(motif.get("size_bias", 1.0)) * rng.randf_range(1.05, 1.18)
+
+func _apply_canopy_forest_profile(motif: Dictionary, rng: RandomNumberGenerator) -> void:
+	motif["blob_count_min"] = maxi(int(motif.get("blob_count_min", 4)), 4)
+	motif["blob_count_max"] = maxi(int(motif.get("blob_count_max", 6)), 6)
+	motif["radius_min"] = maxf(float(motif.get("radius_min", 4.8)), 4.8)
+	motif["radius_max"] = maxf(float(motif.get("radius_max", 8.8)), 8.8)
+	motif["edge_band"] = maxi(2, int(motif.get("edge_band", 2)))
+	motif["connect_nuclei_chance"] = maxf(float(motif.get("connect_nuclei_chance", 0.48)), 0.48)
+	motif["max_links"] = maxi(int(motif.get("max_links", 3)), 3)
+	motif["min_component_tiles"] = maxi(int(motif.get("min_component_tiles", 14)), 14)
+	if rng.randf() < 0.4:
+		motif["size_bias"] = float(motif.get("size_bias", 1.0)) * rng.randf_range(1.04, 1.16)
+
+func _balance_satellite_specs(
+	family: Dictionary,
+	selected_primary: Array[Dictionary],
+	satellite_specs: Array,
+	rng: RandomNumberGenerator
+) -> Array:
+	var occupied := {}
+	for motif in selected_primary:
+		var anchor: Vector2 = motif.get("anchor", Vector2(0.5, 0.5))
+		occupied[_anchor_quadrant(anchor)] = true
+	if occupied.size() >= int(family.get("target_occupied_quadrants", 3)):
+		return []
+	var supplements: Array = []
+	for quadrant in range(4):
+		if occupied.has(quadrant):
+			continue
+		var bounds: Array[Vector2] = _quadrant_anchor_bounds(quadrant)
+		if rng.randf() < 0.58:
+			supplements.append({
+				"kind": MapTypes.BlockerType.FOREST,
+				"shape": "metaball",
+				"forest_profile": "canopy",
+				"anchor_min": bounds[0],
+				"anchor_max": bounds[1],
+				"blob_count_min": 3,
+				"blob_count_max": 5,
+				"radius_min": 4.4,
+				"radius_max": 8.2,
+				"edge_band": 2,
+				"allow_disconnected_clusters": true,
+				"connect_nuclei_chance": 0.46,
+				"max_links": 3,
+				"min_component_tiles": 12,
+				"size_bias_min": 0.96,
+				"size_bias_max": 1.14,
+				"aggression_min": 0.30,
+				"aggression_max": 0.62,
+			})
+		else:
+			supplements.append({
+				"kind": MapTypes.BlockerType.ROCK,
+				"shape": "spine",
+				"ridge_profile": "grand",
+				"anchor_min": bounds[0],
+				"anchor_max": bounds[1],
+				"length_min": 28,
+				"length_max": 48,
+				"thickness_min": 2.8,
+				"thickness_max": 5.0,
+				"segments_min": 4,
+				"segments_max": 6,
+				"edge_band": 1,
+				"size_bias_min": 0.94,
+				"size_bias_max": 1.12,
+				"aggression_min": 0.28,
+				"aggression_max": 0.56,
+			})
+	var existing_midpoints := {}
+	for spec in satellite_specs:
+		var mid_anchor: Vector2 = (Vector2(spec.get("anchor_min", Vector2.ZERO)) + Vector2(spec.get("anchor_max", Vector2.ONE))) * 0.5
+		existing_midpoints[_anchor_quadrant(mid_anchor)] = true
+	var filtered: Array = []
+	for supplement in supplements:
+		var mid_anchor: Vector2 = (Vector2(supplement.get("anchor_min", Vector2.ZERO)) + Vector2(supplement.get("anchor_max", Vector2.ONE))) * 0.5
+		if existing_midpoints.has(_anchor_quadrant(mid_anchor)) and rng.randf() < 0.55:
+			continue
+		filtered.append(supplement)
+	return filtered
+
+func _quadrant_anchor_bounds(quadrant: int) -> Array[Vector2]:
+	match quadrant:
+		0:
+			return [Vector2(0.12, 0.12), Vector2(0.34, 0.34)]
+		1:
+			return [Vector2(0.66, 0.12), Vector2(0.88, 0.34)]
+		2:
+			return [Vector2(0.12, 0.66), Vector2(0.34, 0.88)]
+		_:
+			return [Vector2(0.66, 0.66), Vector2(0.88, 0.88)]
 
 func _too_close_to_existing(candidate: Dictionary, existing: Array[Dictionary], min_distance: float) -> bool:
 	var anchor: Vector2 = candidate.get("anchor", Vector2(0.5, 0.5))
@@ -398,6 +535,7 @@ func _scenario_families() -> Array[Dictionary]:
 	return [
 		{
 			"id": "crescent_guard",
+			"primary_count_max": 3,
 			"center_offset_min": Vector2(-0.08, -0.06),
 			"center_offset_max": Vector2(0.06, 0.06),
 			"entry_profiles": [
@@ -425,19 +563,31 @@ func _scenario_families() -> Array[Dictionary]:
 				{
 					"kind": MapTypes.BlockerType.FOREST,
 					"shape": "metaball",
+					"forest_profile": "canopy",
 					"anchor_min": Vector2(0.70, 0.60),
 					"anchor_max": Vector2(0.88, 0.82),
-					"blob_count_min": 2,
-					"blob_count_max": 5,
-					"radius_min": 4.5,
-					"radius_max": 9.5,
+					"blob_count_min": 4,
+					"blob_count_max": 6,
+					"radius_min": 4.8,
+					"radius_max": 9.8,
 					"jitter": 0.24,
 					"edge_band": 2,
 				},
 			],
+			"water_policy": {
+				"enabled": true,
+				"style": "river_with_basin",
+				"channel_width_min": 2.8,
+				"channel_width_max": 4.8,
+				"size_bias_min": 0.88,
+				"size_bias_max": 1.08,
+				"branch_chance": 0.18,
+			},
 		},
 			{
 				"id": "split_ridges",
+				"primary_count_min": 2,
+				"primary_count_max": 3,
 				"center_offset_min": Vector2(-0.05, -0.04),
 				"center_offset_max": Vector2(0.05, 0.04),
 				"entry_profiles": [
@@ -450,11 +600,11 @@ func _scenario_families() -> Array[Dictionary]:
 					{
 						"kind": MapTypes.BlockerType.ROCK,
 						"shape": "spine",
-						"ridge_profile": "thin",
+						"ridge_profile": "grand",
 						"anchor_min": Vector2(0.22, 0.24),
 						"anchor_max": Vector2(0.40, 0.42),
-						"length_min": 18,
-						"length_max": 32,
+						"length_min": 30,
+						"length_max": 48,
 						"thickness_min": 2.6,
 						"thickness_max": 4.6,
 					"bend_min": 0.16,
@@ -466,11 +616,11 @@ func _scenario_families() -> Array[Dictionary]:
 					{
 						"kind": MapTypes.BlockerType.ROCK,
 						"shape": "spine",
-						"ridge_profile": "thin",
+						"ridge_profile": "grand",
 						"anchor_min": Vector2(0.62, 0.56),
 						"anchor_max": Vector2(0.84, 0.74),
-						"length_min": 18,
-						"length_max": 34,
+						"length_min": 28,
+						"length_max": 46,
 						"thickness_min": 2.4,
 					"thickness_max": 4.8,
 					"bend_min": 0.12,
@@ -479,10 +629,32 @@ func _scenario_families() -> Array[Dictionary]:
 						"segments_max": 4,
 						"edge_band": 1,
 					},
+					{
+						"kind": MapTypes.BlockerType.FOREST,
+						"shape": "metaball",
+						"forest_profile": "canopy",
+						"anchor_min": Vector2(0.36, 0.68),
+						"anchor_max": Vector2(0.58, 0.86),
+						"blob_count_min": 3,
+						"blob_count_max": 5,
+						"radius_min": 4.2,
+						"radius_max": 7.8,
+						"jitter": 0.22,
+						"edge_band": 2,
+					},
 				],
+				"water_policy": {
+					"enabled": true,
+					"style": "meandering_river",
+					"channel_width_min": 2.6,
+					"channel_width_max": 4.2,
+					"size_bias_min": 0.82,
+					"size_bias_max": 1.02,
+				},
 			},
 		{
 			"id": "ridge_plus_flank",
+			"primary_count_max": 3,
 			"center_offset_min": Vector2(-0.10, -0.06),
 			"center_offset_max": Vector2(0.00, 0.07),
 			"entry_profiles": [
@@ -495,10 +667,11 @@ func _scenario_families() -> Array[Dictionary]:
 				{
 					"kind": MapTypes.BlockerType.ROCK,
 					"shape": "spine",
+					"ridge_profile": "grand",
 					"anchor_min": Vector2(0.34, 0.18),
 					"anchor_max": Vector2(0.56, 0.34),
-					"length_min": 30,
-					"length_max": 44,
+					"length_min": 34,
+					"length_max": 52,
 					"thickness_min": 3.2,
 					"thickness_max": 6.2,
 					"bend_min": 0.22,
@@ -510,16 +683,25 @@ func _scenario_families() -> Array[Dictionary]:
 				{
 					"kind": MapTypes.BlockerType.FOREST,
 					"shape": "metaball",
+					"forest_profile": "canopy",
 					"anchor_min": Vector2(0.12, 0.66),
 					"anchor_max": Vector2(0.28, 0.84),
-					"blob_count_min": 2,
-					"blob_count_max": 4,
-					"radius_min": 4.0,
-					"radius_max": 7.5,
+					"blob_count_min": 4,
+					"blob_count_max": 6,
+					"radius_min": 4.6,
+					"radius_max": 8.4,
 					"jitter": 0.20,
 					"edge_band": 2,
 				},
 			],
+			"water_policy": {
+				"enabled": true,
+				"style": "meandering_river",
+				"channel_width_min": 2.6,
+				"channel_width_max": 4.4,
+				"size_bias_min": 0.82,
+				"size_bias_max": 1.02,
+			},
 		},
 		{
 			"id": "broken_ring",
@@ -579,6 +761,7 @@ func _scenario_families() -> Array[Dictionary]:
 		},
 		{
 			"id": "forest_pocket",
+			"primary_count_max": 3,
 			"center_offset_min": Vector2(0.02, -0.08),
 			"center_offset_max": Vector2(0.12, 0.02),
 			"entry_profiles": [
@@ -591,22 +774,24 @@ func _scenario_families() -> Array[Dictionary]:
 				{
 					"kind": MapTypes.BlockerType.FOREST,
 					"shape": "metaball",
+					"forest_profile": "canopy",
 					"anchor_min": Vector2(0.14, 0.58),
 					"anchor_max": Vector2(0.34, 0.82),
-					"blob_count_min": 3,
-					"blob_count_max": 5,
-					"radius_min": 4.2,
-					"radius_max": 8.8,
+					"blob_count_min": 4,
+					"blob_count_max": 6,
+					"radius_min": 4.8,
+					"radius_max": 9.2,
 					"jitter": 0.26,
 					"edge_band": 2,
 				},
 				{
 					"kind": MapTypes.BlockerType.ROCK,
 					"shape": "spine",
+					"ridge_profile": "grand",
 					"anchor_min": Vector2(0.62, 0.34),
 					"anchor_max": Vector2(0.82, 0.52),
-					"length_min": 18,
-					"length_max": 32,
+					"length_min": 28,
+					"length_max": 44,
 					"thickness_min": 2.4,
 					"thickness_max": 4.8,
 					"bend_min": 0.16,
@@ -618,14 +803,17 @@ func _scenario_families() -> Array[Dictionary]:
 			],
 			"water_profile": {
 				"enabled": true,
-				"style": "soft_basin",
+				"style": "river_with_basin",
 				"anchor_min": Vector2(0.78, 0.16),
 				"anchor_max": Vector2(0.90, 0.32),
-				"size_bias_min": 0.80,
-				"size_bias_max": 1.00,
+				"size_bias_min": 0.88,
+				"size_bias_max": 1.08,
 				"basins_min": 1,
 				"basins_max": 1,
 				"jitter": 0.12,
+				"channel_width_min": 2.8,
+				"channel_width_max": 4.6,
+				"branch_chance": 0.12,
 			},
 		},
 		{
@@ -766,6 +954,7 @@ func _scenario_families() -> Array[Dictionary]:
 		},
 		{
 			"id": "offset_gate",
+			"primary_count_max": 3,
 			"center_offset_min": Vector2(-0.12, -0.02),
 			"center_offset_max": Vector2(-0.02, 0.10),
 			"entry_profiles": [
@@ -778,10 +967,11 @@ func _scenario_families() -> Array[Dictionary]:
 				{
 					"kind": MapTypes.BlockerType.ROCK,
 					"shape": "spine",
+					"ridge_profile": "grand",
 					"anchor_min": Vector2(0.58, 0.18),
 					"anchor_max": Vector2(0.78, 0.36),
-					"length_min": 20,
-					"length_max": 36,
+					"length_min": 30,
+					"length_max": 50,
 					"thickness_min": 2.8,
 					"thickness_max": 5.2,
 					"bend_min": 0.18,
@@ -793,19 +983,29 @@ func _scenario_families() -> Array[Dictionary]:
 				{
 					"kind": MapTypes.BlockerType.FOREST,
 					"shape": "metaball",
+					"forest_profile": "canopy",
 					"anchor_min": Vector2(0.20, 0.68),
 					"anchor_max": Vector2(0.42, 0.84),
-					"blob_count_min": 2,
-					"blob_count_max": 5,
-					"radius_min": 4.0,
-					"radius_max": 8.4,
+					"blob_count_min": 4,
+					"blob_count_max": 6,
+					"radius_min": 4.6,
+					"radius_max": 9.0,
 					"jitter": 0.24,
 					"edge_band": 2,
 				},
 			],
+			"water_policy": {
+				"enabled": true,
+				"style": "meandering_river",
+				"channel_width_min": 2.4,
+				"channel_width_max": 4.0,
+				"size_bias_min": 0.78,
+				"size_bias_max": 0.96,
+			},
 		},
 		{
 			"id": "channeled_approach",
+			"primary_count_max": 3,
 			"center_offset_min": Vector2(0.04, -0.10),
 			"center_offset_max": Vector2(0.12, 0.02),
 			"entry_profiles": [
@@ -819,10 +1019,11 @@ func _scenario_families() -> Array[Dictionary]:
 				{
 					"kind": MapTypes.BlockerType.ROCK,
 					"shape": "spine",
+					"ridge_profile": "grand",
 					"anchor_min": Vector2(0.26, 0.46),
 					"anchor_max": Vector2(0.40, 0.70),
-					"length_min": 24,
-					"length_max": 38,
+					"length_min": 30,
+					"length_max": 48,
 					"thickness_min": 2.8,
 					"thickness_max": 5.0,
 					"bend_min": 0.20,
@@ -849,14 +1050,150 @@ func _scenario_families() -> Array[Dictionary]:
 			],
 			"water_profile": {
 				"enabled": true,
-				"style": "soft_basin",
+				"style": "river_with_basin",
 				"anchor_min": Vector2(0.74, 0.62),
 				"anchor_max": Vector2(0.90, 0.84),
-				"size_bias_min": 0.72,
-				"size_bias_max": 0.94,
+				"size_bias_min": 0.82,
+				"size_bias_max": 1.02,
 				"basins_min": 1,
 				"basins_max": 2,
 				"jitter": 0.14,
+				"channel_width_min": 2.6,
+				"channel_width_max": 4.4,
+				"branch_chance": 0.18,
+			},
+		},
+		{
+			"id": "river_spine_crossing",
+			"primary_count_min": 3,
+			"primary_count_max": 3,
+			"satellite_count_min": 2,
+			"satellite_count_max": 4,
+			"center_offset_min": Vector2(-0.04, -0.04),
+			"center_offset_max": Vector2(0.08, 0.06),
+			"entry_profiles": [
+				{"side": "north", "offset_min": 0.26, "offset_max": 0.48},
+				{"side": "east", "offset_min": 0.48, "offset_max": 0.72},
+				{"side": "south", "offset_min": 0.42, "offset_max": 0.68},
+			],
+			"corridor_width_range": Vector2i(3, 5),
+			"blocker_motifs": [
+				{
+					"kind": MapTypes.BlockerType.ROCK,
+					"shape": "spine",
+					"ridge_profile": "grand",
+					"anchor_min": Vector2(0.14, 0.20),
+					"anchor_max": Vector2(0.26, 0.36),
+					"length_min": 36,
+					"length_max": 56,
+					"thickness_min": 3.2,
+					"thickness_max": 5.8,
+					"segments_min": 4,
+					"segments_max": 6,
+					"edge_band": 1,
+				},
+				{
+					"kind": MapTypes.BlockerType.ROCK,
+					"shape": "spine",
+					"ridge_profile": "grand",
+					"anchor_min": Vector2(0.68, 0.58),
+					"anchor_max": Vector2(0.82, 0.76),
+					"length_min": 30,
+					"length_max": 50,
+					"thickness_min": 2.8,
+					"thickness_max": 5.2,
+					"segments_min": 4,
+					"segments_max": 6,
+					"edge_band": 1,
+				},
+				{
+					"kind": MapTypes.BlockerType.FOREST,
+					"shape": "metaball",
+					"forest_profile": "canopy",
+					"anchor_min": Vector2(0.18, 0.62),
+					"anchor_max": Vector2(0.36, 0.84),
+					"blob_count_min": 4,
+					"blob_count_max": 6,
+					"radius_min": 4.8,
+					"radius_max": 9.0,
+					"jitter": 0.22,
+					"edge_band": 2,
+				},
+			],
+			"water_policy": {
+				"enabled": true,
+				"style": "river_with_basin",
+				"channel_width_min": 2.8,
+				"channel_width_max": 4.8,
+				"size_bias_min": 0.92,
+				"size_bias_max": 1.12,
+				"branch_chance": 0.22,
+			},
+		},
+		{
+			"id": "deep_woodland_valley",
+			"primary_count_min": 3,
+			"primary_count_max": 3,
+			"satellite_count_min": 2,
+			"satellite_count_max": 4,
+			"center_offset_min": Vector2(-0.10, 0.00),
+			"center_offset_max": Vector2(0.02, 0.10),
+			"entry_profiles": [
+				{"side": "west", "offset_min": 0.28, "offset_max": 0.48},
+				{"side": "north", "offset_min": 0.44, "offset_max": 0.68},
+				{"side": "south", "offset_min": 0.48, "offset_max": 0.74},
+			],
+			"corridor_width_range": Vector2i(3, 5),
+			"blocker_motifs": [
+				{
+					"kind": MapTypes.BlockerType.FOREST,
+					"shape": "metaball",
+					"forest_profile": "canopy",
+					"anchor_min": Vector2(0.16, 0.18),
+					"anchor_max": Vector2(0.34, 0.36),
+					"blob_count_min": 4,
+					"blob_count_max": 6,
+					"radius_min": 4.6,
+					"radius_max": 8.8,
+					"jitter": 0.24,
+					"edge_band": 2,
+				},
+				{
+					"kind": MapTypes.BlockerType.FOREST,
+					"shape": "metaball",
+					"forest_profile": "canopy",
+					"anchor_min": Vector2(0.62, 0.58),
+					"anchor_max": Vector2(0.84, 0.82),
+					"blob_count_min": 4,
+					"blob_count_max": 6,
+					"radius_min": 4.8,
+					"radius_max": 9.2,
+					"jitter": 0.24,
+					"edge_band": 2,
+				},
+				{
+					"kind": MapTypes.BlockerType.ROCK,
+					"shape": "spine",
+					"ridge_profile": "grand",
+					"anchor_min": Vector2(0.52, 0.16),
+					"anchor_max": Vector2(0.74, 0.28),
+					"length_min": 30,
+					"length_max": 48,
+					"thickness_min": 2.8,
+					"thickness_max": 5.2,
+					"segments_min": 4,
+					"segments_max": 6,
+					"edge_band": 1,
+				},
+			],
+			"water_policy": {
+				"enabled": true,
+				"style": "meandering_river",
+				"channel_width_min": 2.6,
+				"channel_width_max": 4.2,
+				"size_bias_min": 0.88,
+				"size_bias_max": 1.06,
+				"branch_chance": 0.14,
 			},
 		},
 	]

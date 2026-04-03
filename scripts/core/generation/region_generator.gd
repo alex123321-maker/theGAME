@@ -48,6 +48,7 @@ func generate_clearing(map_data: MapData, rng: RandomNumberGenerator, config, co
 			rng
 		)
 		points = GenerationUtilsClass.smooth_points(map_data, fallback_raw, 2, 3)
+	points = _largest_connected_component(points)
 
 	map_data.central_zone_tiles = points.duplicate()
 
@@ -199,3 +200,31 @@ func _push_frontier_neighbors(
 		if frontier.has(neighbor):
 			continue
 		frontier.append(neighbor)
+
+func _largest_connected_component(points: Array[Vector2i]) -> Array[Vector2i]:
+	if points.size() <= 1:
+		return points
+	var selected := {}
+	for point in points:
+		selected[point] = true
+	var visited := {}
+	var best: Array[Vector2i] = []
+	for point in points:
+		if visited.has(point):
+			continue
+		var component: Array[Vector2i] = []
+		var frontier: Array[Vector2i] = [point]
+		visited[point] = true
+		while not frontier.is_empty():
+			var current: Vector2i = frontier.pop_front()
+			component.append(current)
+			for neighbor in GenerationUtilsClass.cardinal_neighbors(current):
+				if visited.has(neighbor):
+					continue
+				if not selected.has(neighbor):
+					continue
+				visited[neighbor] = true
+				frontier.append(neighbor)
+		if component.size() > best.size():
+			best = component
+	return best

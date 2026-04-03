@@ -91,15 +91,49 @@ func _build_road_graph() -> void:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.albedo_color = Color(1.0, 0.88, 0.32, 0.95)
 	for road in map_data.roads:
-		var points: Array[Vector3] = []
-		var entry_point: Dictionary = road.get("entry_point", {})
-		points.append(WorldGridProjection3DClass.logical_to_world(Vector2i(int(entry_point.get("x", 0)), int(entry_point.get("y", 0))), OVERLAY_Y + 0.03))
-		for control in road.get("control_points", []):
-			points.append(Vector3(float(control.get("x", 0.0)) * WorldGridProjection3DClass.TILE_WORLD_SIZE, OVERLAY_Y + 0.03, float(control.get("y", 0.0)) * WorldGridProjection3DClass.TILE_WORLD_SIZE))
-		var attach_point: Dictionary = road.get("attach_point", {})
-		points.append(WorldGridProjection3DClass.logical_to_world(Vector2i(int(attach_point.get("x", 0)), int(attach_point.get("y", 0))), OVERLAY_Y + 0.03))
+		var points: Array[Vector3] = _road_graph_points(road)
 		for index in range(points.size() - 1):
 			_graph_root.add_child(_build_line_mesh(points[index], points[index + 1], material))
+
+func _road_graph_points(road: Dictionary) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	var spine_tiles: Array = road.get("spine_tiles", [])
+	if not spine_tiles.is_empty():
+		for raw_point in spine_tiles:
+			var point: Vector2i = _dict_to_vec2i(raw_point)
+			points.append(WorldGridProjection3DClass.logical_to_world(point, OVERLAY_Y + 0.03))
+		return points
+
+	var entry_point: Dictionary = road.get("entry_point", {})
+	points.append(
+		WorldGridProjection3DClass.logical_to_world(
+			Vector2i(int(entry_point.get("x", 0)), int(entry_point.get("y", 0))),
+			OVERLAY_Y + 0.03
+		)
+	)
+	for control in road.get("control_points", []):
+		points.append(
+			Vector3(
+				float(control.get("x", 0.0)) * WorldGridProjection3DClass.TILE_WORLD_SIZE,
+				OVERLAY_Y + 0.03,
+				float(control.get("y", 0.0)) * WorldGridProjection3DClass.TILE_WORLD_SIZE
+			)
+		)
+	var attach_point: Dictionary = road.get("attach_point", {})
+	points.append(
+		WorldGridProjection3DClass.logical_to_world(
+			Vector2i(int(attach_point.get("x", 0)), int(attach_point.get("y", 0))),
+			OVERLAY_Y + 0.03
+		)
+	)
+	return points
+
+func _dict_to_vec2i(value) -> Vector2i:
+	if value is Vector2i:
+		return value
+	if value is Dictionary:
+		return Vector2i(int(value.get("x", 0)), int(value.get("y", 0)))
+	return Vector2i.ZERO
 
 func _material(key: String, color: Color) -> StandardMaterial3D:
 	if _material_cache.has(key):

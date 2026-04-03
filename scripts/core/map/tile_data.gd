@@ -15,6 +15,7 @@ var walk_cost: float = 1.0
 var is_walkable: bool = true
 var is_buildable: bool = false
 var is_road: bool = false
+var is_bridge: bool = false
 var is_water: bool = false
 var is_blocked: bool = false
 var is_future_wallable: bool = false
@@ -45,6 +46,7 @@ func to_dict() -> Dictionary:
 		"is_walkable": is_walkable,
 		"is_buildable": is_buildable,
 		"is_road": is_road,
+		"is_bridge": is_bridge,
 		"is_water": is_water,
 		"is_blocked": is_blocked,
 		"is_future_wallable": is_future_wallable,
@@ -74,6 +76,7 @@ static func from_dict(source: Dictionary):
 	tile.is_walkable = bool(source.get("is_walkable", true))
 	tile.is_buildable = bool(source.get("is_buildable", false))
 	tile.is_road = bool(source.get("is_road", false))
+	tile.is_bridge = bool(source.get("is_bridge", false))
 	tile.is_water = bool(source.get("is_water", false))
 	tile.is_blocked = bool(source.get("is_blocked", false))
 	tile.is_future_wallable = bool(source.get("is_future_wallable", false))

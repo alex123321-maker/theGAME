@@ -55,7 +55,7 @@ func _select_void_peaks(
 		return []
 
 	var selected: Array[Dictionary] = []
-	var target_count: int = rng.randi_range(2, 4)
+	var target_count: int = rng.randi_range(3, 5)
 	var focused_component_count: int = mini(2, open_components.size())
 	for index in range(focused_component_count):
 		var focused: Dictionary = open_components[index]
@@ -77,7 +77,7 @@ func _select_void_peaks(
 		if selected.size() >= target_count:
 			break
 		var component_size: int = int(component.get("size", 0))
-		var peaks_for_component: int = 2 if component_size > 420 else 1
+		var peaks_for_component: int = 2 if component_size > 320 else 1
 		var placed_for_component: int = 0
 		while placed_for_component < peaks_for_component and selected.size() < target_count:
 			var next_peak: Dictionary = _best_peak_in_component(
@@ -203,24 +203,24 @@ func _build_filler_shape(
 	var selected := {}
 	match style:
 		"forest_patch":
-			var nuclei: int = rng.randi_range(2, 4)
+			var nuclei: int = rng.randi_range(3, 5)
 			for _i in range(nuclei):
 				var direction: Vector2 = Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
-				var local_center: Vector2 = Vector2(center) + (direction * rng.randf_range(0.0, 5.8))
-				var radius: float = rng.randf_range(1.8, 3.6)
+				var local_center: Vector2 = Vector2(center) + (direction * rng.randf_range(0.0, 7.2))
+				var radius: float = rng.randf_range(2.6, 5.2)
 				_stamp_disc(selected, Vector2i(roundi(local_center.x), roundi(local_center.y)), radius, map_data)
 		"rock_scree":
 			var direction: Vector2 = Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
-			var length: float = rng.randf_range(7.0, 12.0)
+			var length: float = rng.randf_range(9.0, 16.0)
 			var points: Array[Vector2] = [Vector2(center), Vector2(center) + direction * length]
 			var spine: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline(points)
 			for point in spine:
-				_stamp_disc(selected, point, rng.randf_range(1.2, 2.2), map_data)
+				_stamp_disc(selected, point, rng.randf_range(1.6, 2.8), map_data)
 		_:
-			_stamp_disc(selected, center, rng.randf_range(2.0, 4.6), map_data)
+			_stamp_disc(selected, center, rng.randf_range(2.4, 5.2), map_data)
 			for point in GenerationUtilsClass.cardinal_neighbors(center):
 				if rng.randf() < 0.6:
-					_stamp_disc(selected, point, rng.randf_range(1.2, 2.0), map_data)
+					_stamp_disc(selected, point, rng.randf_range(1.6, 2.6), map_data)
 
 	var points: Array[Vector2i] = []
 	for key in selected.keys():

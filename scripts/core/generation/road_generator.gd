@@ -3,40 +3,58 @@ class_name RoadGenerator
 
 const GenerationUtilsClass = preload("res://scripts/core/generation/generation_utils.gd")
 const INF_COST: float = 1_000_000.0
+const BRIDGE_MAX_WATER_SPAN: int = 6
+const BRIDGE_BASE_PENALTY: float = 14.0
 
 func generate(map_data: MapData, _rng: RandomNumberGenerator, config, composition: Dictionary) -> void:
 	var center_points: Array[Vector2i] = map_data.central_zone_tiles
 	if center_points.is_empty():
 		return
 
+	var pending_entries: Array = composition.get("entries", []).duplicate(true)
 	var road_index: int = 0
-	for entry_spec in composition.get("entries", []):
-		var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
-		_ensure_entry_tile(map_data, entry_point)
-		map_data.entry_points.append(entry_point)
-		var attach_point: Vector2i = _closest_center_point(center_points, entry_point)
-		var spine_tiles: Array[Vector2i] = _find_path_with_fallback(map_data, entry_point, attach_point)
-		if spine_tiles.is_empty():
-			continue
-		var road_report: Dictionary = _paint_road(map_data, spine_tiles, map_data.seed, road_index, config)
-		var max_width_cells: int = int(road_report.get("max_width_cells", 1))
-		var painted_tiles: Array[Vector2i] = road_report.get("painted_tiles", [])
-		var width_class: int = _road_width_class_from_cells(max_width_cells)
-		map_data.roads.append({
-			"entry_point": {"x": entry_point.x, "y": entry_point.y},
-			"attach_point": {"x": attach_point.x, "y": attach_point.y},
-			"width_class": width_class,
-			"width_name": MapTypes.road_width_name(width_class),
-			"min_width_cells": int(road_report.get("min_width_cells", 1)),
-			"max_width_cells": max_width_cells,
-			"control_points": _serialize_vec2_array(_sample_control_points(spine_tiles)),
-			"spine_tiles": _serialize_vec2i_array(spine_tiles),
-			"tiles": _serialize_vec2i_array(painted_tiles),
-		})
-		road_index += 1
+	var max_passes: int = maxi(2, pending_entries.size())
+	var pass_index: int = 0
+	while not pending_entries.is_empty() and pass_index < max_passes:
+		var progress_made: bool = false
+		var next_pending: Array = []
+		for entry_spec in pending_entries:
+			var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
+			_ensure_entry_tile(map_data, entry_point)
+			if not map_data.entry_points.has(entry_point):
+				map_data.entry_points.append(entry_point)
+			var attach_point: Vector2i = _closest_center_point(center_points, entry_point)
+			var spine_tiles: Array[Vector2i] = _find_path_with_fallback(map_data, entry_point, attach_point)
+			if spine_tiles.is_empty():
+				next_pending.append(entry_spec)
+				continue
+			var road_report: Dictionary = _paint_road(map_data, spine_tiles, map_data.seed, road_index, config)
+			var max_width_cells: int = int(road_report.get("max_width_cells", 1))
+			var painted_tiles: Array[Vector2i] = road_report.get("painted_tiles", [])
+			var width_class: int = _road_width_class_from_cells(max_width_cells)
+			map_data.roads.append({
+				"entry_point": {"x": entry_point.x, "y": entry_point.y},
+				"attach_point": {"x": attach_point.x, "y": attach_point.y},
+				"width_class": width_class,
+				"width_name": MapTypes.road_width_name(width_class),
+				"min_width_cells": int(road_report.get("min_width_cells", 1)),
+				"max_width_cells": max_width_cells,
+				"control_points": _serialize_vec2_array(_sample_control_points(spine_tiles)),
+				"spine_tiles": _serialize_vec2i_array(spine_tiles),
+				"tiles": _serialize_vec2i_array(painted_tiles),
+			})
+			road_index += 1
+			progress_made = true
+		if not progress_made:
+			break
+		pending_entries = next_pending
+		pass_index += 1
 
 func _find_path_with_fallback(map_data: MapData, from_point: Vector2i, to_point: Vector2i) -> Array[Vector2i]:
 	var path: Array[Vector2i] = _a_star_path(map_data, from_point, to_point, false)
+	if not path.is_empty():
+		return path
+	path = _path_via_bridge(map_data, from_point, to_point)
 	if not path.is_empty():
 		return path
 	path = _a_star_path(map_data, from_point, to_point, true)
@@ -178,6 +196,114 @@ func _emergency_straight_path(map_data: MapData, from_point: Vector2i, to_point:
 		path.append(point)
 	return path
 
+func _path_via_bridge(map_data: MapData, from_point: Vector2i, to_point: Vector2i) -> Array[Vector2i]:
+	var candidates: Array[Dictionary] = _bridge_candidates(map_data, from_point, to_point)
+	if candidates.is_empty():
+		return []
+	var best_path: Array[Vector2i] = []
+	var best_score: float = INF_COST
+	for candidate in candidates:
+		var variants: Array[Dictionary] = [
+			{
+				"near": Vector2i(candidate.get("bank_a", Vector2i.ZERO)),
+				"far": Vector2i(candidate.get("bank_b", Vector2i.ZERO)),
+				"bridge": Array(candidate.get("bridge_tiles", [])),
+			},
+			{
+				"near": Vector2i(candidate.get("bank_b", Vector2i.ZERO)),
+				"far": Vector2i(candidate.get("bank_a", Vector2i.ZERO)),
+				"bridge": _reversed_points(Array(candidate.get("bridge_tiles", []))),
+			},
+		]
+		for variant in variants:
+			var bank_path_a: Array[Vector2i] = _a_star_path(map_data, from_point, Vector2i(variant.get("near", Vector2i.ZERO)), false)
+			if bank_path_a.is_empty():
+				continue
+			var bank_path_b: Array[Vector2i] = _a_star_path(map_data, Vector2i(variant.get("far", Vector2i.ZERO)), to_point, false)
+			if bank_path_b.is_empty():
+				continue
+			var combined: Array[Vector2i] = bank_path_a.duplicate()
+			for water_point in Array(variant.get("bridge", [])):
+				if combined.is_empty() or combined[combined.size() - 1] != water_point:
+					combined.append(water_point)
+			for i in range(1, bank_path_b.size()):
+				if combined.is_empty() or combined[combined.size() - 1] != bank_path_b[i]:
+					combined.append(bank_path_b[i])
+			var span: int = int(candidate.get("water_span", 0))
+			var score: float = float(combined.size()) + (float(span) * BRIDGE_BASE_PENALTY)
+			if score < best_score:
+				best_score = score
+				best_path = combined
+	return best_path
+
+func _bridge_candidates(map_data: MapData, from_point: Vector2i, to_point: Vector2i) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	for tile in map_data.tiles:
+		var start := Vector2i(tile.x, tile.y)
+		if not _is_bridge_bank_tile(tile):
+			continue
+		for direction in [Vector2i.RIGHT, Vector2i.DOWN]:
+			var first_water: Vector2i = start + direction
+			if not map_data.is_in_bounds(first_water.x, first_water.y):
+				continue
+			var first_tile = map_data.get_tile(first_water.x, first_water.y)
+			if first_tile == null or not _is_bridge_water_tile(first_tile):
+				continue
+			var water_tiles: Array[Vector2i] = []
+			var probe: Vector2i = first_water
+			while map_data.is_in_bounds(probe.x, probe.y) and water_tiles.size() <= BRIDGE_MAX_WATER_SPAN:
+				var probe_tile = map_data.get_tile(probe.x, probe.y)
+				if probe_tile == null:
+					break
+				if _is_bridge_water_tile(probe_tile):
+					water_tiles.append(probe)
+					probe += direction
+					continue
+				if water_tiles.is_empty():
+					break
+				if water_tiles.size() <= BRIDGE_MAX_WATER_SPAN and _is_bridge_bank_tile(probe_tile):
+					var bank_b: Vector2i = probe
+					var line_penalty: float = _distance_to_segment(Vector2(bank_b), Vector2(from_point), Vector2(to_point))
+					candidates.append({
+						"bank_a": start,
+						"bank_b": bank_b,
+						"bridge_tiles": water_tiles.duplicate(),
+						"water_span": water_tiles.size(),
+						"sort_score": float(water_tiles.size()) + line_penalty,
+					})
+				break
+	if candidates.size() <= 1:
+		return candidates
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("sort_score", INF_COST)) < float(b.get("sort_score", INF_COST))
+	)
+	if candidates.size() > 24:
+		candidates.resize(24)
+	return candidates
+
+func _is_bridge_bank_tile(tile) -> bool:
+	if tile == null:
+		return false
+	if tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER:
+		return false
+	if tile.is_blocked:
+		return false
+	return tile.is_walkable
+
+func _is_bridge_water_tile(tile) -> bool:
+	if tile == null:
+		return false
+	return tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER
+
+func _distance_to_segment(point: Vector2, start: Vector2, finish: Vector2) -> float:
+	var segment: Vector2 = finish - start
+	var length_sq: float = segment.length_squared()
+	if length_sq <= 0.0001:
+		return point.distance_to(start)
+	var t: float = clampf((point - start).dot(segment) / length_sq, 0.0, 1.0)
+	var projection: Vector2 = start + (segment * t)
+	return point.distance_to(projection)
+
 func _closest_center_point(points: Array[Vector2i], origin: Vector2i) -> Vector2i:
 	var best_point: Vector2i = points[0]
 	var best_distance: float = best_point.distance_to(origin)
@@ -199,6 +325,8 @@ func _paint_road(map_data: MapData, road_tiles: Array[Vector2i], seed: int, road
 		min_width_cells = mini(min_width_cells, width_cells)
 		max_width_cells = maxi(max_width_cells, width_cells)
 		var offsets: Array[Vector2i] = _road_offsets(road_tiles, point_index, width_cells, seed, road_index)
+		var source_tile = map_data.get_tile(point.x, point.y)
+		var allow_bridge_tile: bool = source_tile != null and (source_tile.is_water or source_tile.base_terrain_type == MapTypes.TerrainType.WATER)
 		for offset_index in range(offsets.size()):
 			var target: Vector2i = point + offsets[offset_index]
 			if not map_data.is_in_bounds(target.x, target.y):
@@ -207,7 +335,8 @@ func _paint_road(map_data: MapData, road_tiles: Array[Vector2i], seed: int, road
 				map_data,
 				target,
 				width_cells,
-				point_index == 0 and offsets[offset_index] == Vector2i.ZERO
+				point_index == 0 and offsets[offset_index] == Vector2i.ZERO,
+				allow_bridge_tile
 			):
 				painted[target] = true
 	_fill_enclosed_road_gaps(map_data, painted)
@@ -274,17 +403,19 @@ func _road_normal(tangent: Vector2i) -> Vector2i:
 		return Vector2i.UP
 	return Vector2i(-dy, dx)
 
-func _mark_road_tile(map_data: MapData, point: Vector2i, width_cells: int, is_entry_tile: bool) -> bool:
+func _mark_road_tile(map_data: MapData, point: Vector2i, width_cells: int, is_entry_tile: bool, allow_bridge_tile: bool = false) -> bool:
 	var tile = map_data.get_tile(point.x, point.y)
 	if tile == null:
 		return false
-	if not _can_paint_road_tile(tile, is_entry_tile):
+	if not _can_paint_road_tile(tile, is_entry_tile, allow_bridge_tile):
 		return false
 	var underlying_terrain: int = tile.base_terrain_type
+	var is_bridge_tile: bool = allow_bridge_tile and (tile.is_water or underlying_terrain == MapTypes.TerrainType.WATER)
 	tile.terrain_type = MapTypes.TerrainType.ROAD
 	tile.road_width_cells = maxi(tile.road_width_cells, width_cells)
 	tile.road_width_class = maxi(tile.road_width_class, _road_width_class_from_cells(tile.road_width_cells))
 	tile.is_road = true
+	tile.is_bridge = is_bridge_tile
 	tile.is_walkable = true
 	tile.is_buildable = false
 	tile.is_water = false
@@ -294,16 +425,21 @@ func _mark_road_tile(map_data: MapData, point: Vector2i, width_cells: int, is_en
 		tile.poi_tag = MapTypes.PoiTag.ENTRY
 	if not tile.debug_tags.has("road"):
 		tile.debug_tags.append("road")
+	if is_bridge_tile and not tile.debug_tags.has("bridge"):
+		tile.debug_tags.append("bridge")
 	if underlying_terrain == MapTypes.TerrainType.FOREST and not tile.debug_tags.has("road_through_forest_fringe"):
 		tile.debug_tags.append("road_through_forest_fringe")
 	if underlying_terrain == MapTypes.TerrainType.ROCK and not tile.debug_tags.has("road_through_rock_edge"):
 		tile.debug_tags.append("road_through_rock_edge")
 	return true
 
-func _can_paint_road_tile(tile, is_entry_tile: bool) -> bool:
+func _can_paint_road_tile(tile, is_entry_tile: bool, allow_bridge_tile: bool = false) -> bool:
 	if tile == null:
 		return false
-	if tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER:
+	var is_water_tile: bool = tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER
+	if is_water_tile and allow_bridge_tile:
+		return not tile.is_blocked
+	if is_water_tile and not allow_bridge_tile:
 		return false
 	if tile.is_blocked and not is_entry_tile:
 		return false
@@ -338,7 +474,8 @@ func _fill_enclosed_road_gaps(map_data: MapData, painted: Dictionary) -> void:
 			var inferred_width: int = 1
 			for neighbor in road_neighbors:
 				inferred_width = maxi(inferred_width, int(neighbor.road_width_cells))
-			if _mark_road_tile(map_data, point, inferred_width, false):
+			var allow_bridge_tile: bool = tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER
+			if _mark_road_tile(map_data, point, inferred_width, false, allow_bridge_tile):
 				if not tile.debug_tags.has("road_gap_fill"):
 					tile.debug_tags.append("road_gap_fill")
 				painted[point] = true
@@ -387,6 +524,7 @@ func _ensure_entry_tile(map_data: MapData, entry_point: Vector2i) -> void:
 		tile.base_terrain_type = MapTypes.TerrainType.GROUND
 		tile.terrain_type = MapTypes.TerrainType.GROUND
 		tile.is_water = false
+		tile.is_bridge = false
 	if tile.is_blocked:
 		tile.is_blocked = false
 		tile.is_walkable = true
@@ -428,3 +566,9 @@ func _dictionary_points(points: Dictionary) -> Array[Vector2i]:
 		var point: Vector2i = key
 		payload.append(point)
 	return payload
+
+func _reversed_points(points: Array) -> Array[Vector2i]:
+	var reversed: Array[Vector2i] = []
+	for i in range(points.size() - 1, -1, -1):
+		reversed.append(points[i])
+	return reversed

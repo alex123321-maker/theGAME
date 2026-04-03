@@ -7,6 +7,7 @@ const MapDebugOverlayClass = preload("res://scripts/presentation/map_debug_overl
 const TERRAIN_Y: float = 0.0
 const WATER_Y: float = -0.10
 const ROAD_Y: float = 0.03
+const BRIDGE_Y: float = 0.12
 const TRANSITION_Y: float = 0.04
 const BLOCKER_Y: float = 0.55
 const DECOR_Y: float = 0.18
@@ -139,13 +140,15 @@ func _build_road_layer() -> void:
 		var length: float = 0.98 if horizontal != vertical else width
 		road_mesh.size = Vector3(
 			length if horizontal else width,
-			0.04,
+			0.08 if tile.is_bridge else 0.04,
 			length if vertical else width
 		)
 		mesh.mesh = road_mesh
 		mesh.material_override = _material(_road_material_key(tile), _road_color(tile), 0.08)
-		mesh.position = WorldGridProjection3DClass.logical_to_world(Vector2i(tile.x, tile.y), ROAD_Y)
+		mesh.position = WorldGridProjection3DClass.logical_to_world(Vector2i(tile.x, tile.y), BRIDGE_Y if tile.is_bridge else ROAD_Y)
 		_road_root.add_child(mesh)
+		if tile.is_bridge:
+			_build_bridge_rails(tile, horizontal, vertical, width)
 
 func _build_water_layer() -> void:
 	for tile in map_data.tiles:
@@ -300,6 +303,8 @@ func _road_visual_width(width_cells: int) -> float:
 			return 0.72
 
 func _road_color(tile) -> Color:
+	if tile.is_bridge:
+		return Color(0.44, 0.30, 0.18, 1.0)
 	if tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER:
 		return Color(0.66, 0.61, 0.50, 1.0)
 	if tile.base_terrain_type == MapTypes.TerrainType.FOREST:
@@ -317,6 +322,8 @@ func _road_color(tile) -> Color:
 	return Color(0.53, 0.41, 0.31, 1.0)
 
 func _road_material_key(tile) -> String:
+	if tile.is_bridge:
+		return "bridge_%d" % tile.road_width_cells
 	if tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER:
 		return "road_water_%d" % tile.road_width_cells
 	if tile.base_terrain_type == MapTypes.TerrainType.BLOCKER:
@@ -429,6 +436,33 @@ func _ensure_layer(node_name: String) -> Node3D:
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():
 		child.free()
+
+func _build_bridge_rails(tile, horizontal: bool, vertical: bool, width: float) -> void:
+	var rail_offsets: Array[float] = []
+	var half_extent: float = maxf(0.24, width * 0.52)
+	if horizontal != vertical:
+		rail_offsets = [-half_extent, half_extent]
+	else:
+		rail_offsets = [-0.28, 0.28]
+	for offset in rail_offsets:
+		var rail := MeshInstance3D.new()
+		var rail_mesh := BoxMesh.new()
+		rail_mesh.size = Vector3(
+			0.92 if horizontal or not vertical else 0.10,
+			0.05,
+			0.92 if vertical or not horizontal else 0.10
+		)
+		rail.mesh = rail_mesh
+		rail.material_override = _material("bridge_rail", Color(0.31, 0.20, 0.12, 1.0), 0.18)
+		rail.position = WorldGridProjection3DClass.logical_to_world(Vector2i(tile.x, tile.y), BRIDGE_Y + 0.08)
+		if horizontal and not vertical:
+			rail.position.z += offset
+		elif vertical and not horizontal:
+			rail.position.x += offset
+			rail.rotation.y = PI * 0.5
+		else:
+			rail.position.z += offset
+		_road_root.add_child(rail)
 
 func _decor_density(tile) -> float:
 	if tile.base_terrain_type == MapTypes.TerrainType.FOREST:

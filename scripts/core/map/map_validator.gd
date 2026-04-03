@@ -18,6 +18,7 @@ func validate(map_data: MapData) -> Dictionary:
 		"buildable_tiles": 0,
 		"buildable_in_center_pct": 0.0,
 		"road_tile_count": 0,
+		"bridge_tile_count": 0,
 		"water_tile_count": 0,
 		"blocker_tile_count": 0,
 	}
@@ -33,6 +34,8 @@ func validate(map_data: MapData) -> Dictionary:
 			metrics["buildable_tiles"] += 1
 		if tile.is_road:
 			metrics["road_tile_count"] += 1
+		if tile.is_bridge:
+			metrics["bridge_tile_count"] += 1
 		if tile.is_water:
 			metrics["water_tile_count"] += 1
 		if tile.is_blocked:
