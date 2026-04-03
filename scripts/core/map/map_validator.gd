@@ -5,12 +5,17 @@ const GameConfigData = preload("res://autoload/game_config.gd")
 
 func validate(map_data: MapData) -> Dictionary:
 	var errors: Array[String] = []
+	var stages: Array[Dictionary] = []
 	var metrics := {
 		"entry_count": map_data.entry_points.size(),
 		"central_zone_tile_count": map_data.central_zone_tiles.size(),
 		"reachable_entries": 0,
+		"connected_center_tiles": 0,
 		"buildable_tiles": 0,
 		"buildable_in_center_pct": 0.0,
+		"road_tile_count": 0,
+		"water_tile_count": 0,
+		"blocker_tile_count": 0,
 	}
 
 	if map_data.entry_points.size() < GameConfigData.MIN_ENTRY_COUNT:
@@ -22,10 +27,26 @@ func validate(map_data: MapData) -> Dictionary:
 	for tile in map_data.tiles:
 		if tile.is_buildable:
 			metrics["buildable_tiles"] += 1
+		if tile.is_road:
+			metrics["road_tile_count"] += 1
+		if tile.is_water:
+			metrics["water_tile_count"] += 1
+		if tile.is_blocked:
+			metrics["blocker_tile_count"] += 1
 
 	var center_targets := {}
 	for point in map_data.central_zone_tiles:
 		center_targets[point] = true
+
+	if not map_data.central_zone_tiles.is_empty():
+		metrics["connected_center_tiles"] = _count_connected_center_tiles(map_data, map_data.central_zone_tiles[0], center_targets)
+		if int(metrics["connected_center_tiles"]) != map_data.central_zone_tiles.size():
+			errors.append("central_zone_disconnected")
+		stages.append({
+			"stage": "validate_center_connectivity",
+			"ok": int(metrics["connected_center_tiles"]) == map_data.central_zone_tiles.size(),
+			"reason": "" if int(metrics["connected_center_tiles"]) == map_data.central_zone_tiles.size() else "center_zone_is_split",
+		})
 
 	if not map_data.central_zone_tiles.is_empty():
 		var buildable_center_count: int = 0
@@ -41,11 +62,30 @@ func validate(map_data: MapData) -> Dictionary:
 
 	if metrics["reachable_entries"] < min(GameConfigData.MIN_ENTRY_COUNT, map_data.entry_points.size()):
 		errors.append("insufficient_reachable_entries")
+	stages.append({
+		"stage": "validate_entry_paths",
+		"ok": metrics["reachable_entries"] >= min(GameConfigData.MIN_ENTRY_COUNT, map_data.entry_points.size()),
+		"reason": "" if metrics["reachable_entries"] >= min(GameConfigData.MIN_ENTRY_COUNT, map_data.entry_points.size()) else "not_all_entries_reach_center",
+	})
+
+	if metrics["buildable_tiles"] < GameConfigData.DEFAULT_MIN_CENTER_AREA * 0.45:
+		errors.append("buildable_area_below_target")
+	stages.append({
+		"stage": "validate_buildable_area",
+		"ok": metrics["buildable_tiles"] >= GameConfigData.DEFAULT_MIN_CENTER_AREA * 0.45,
+		"reason": "" if metrics["buildable_tiles"] >= GameConfigData.DEFAULT_MIN_CENTER_AREA * 0.45 else "buildable_area_too_small",
+	})
+
+	if metrics["road_tile_count"] <= 0:
+		errors.append("missing_roads")
+	if map_data.generation_summary.get("has_water", false) and metrics["water_tile_count"] <= 0:
+		errors.append("missing_water_region")
 
 	var report := {
 		"ok": errors.is_empty(),
 		"errors": errors,
 		"metrics": metrics,
+		"stages": stages,
 	}
 	return report
 
@@ -78,10 +118,29 @@ func _has_path_to_any_center(
 			var tile = map_data.get_tile(next.x, next.y)
 			if tile == null:
 				continue
-			if GameConfigData.BLOCKED_TERRAINS.has(tile.terrain_type):
+			if not tile.is_walkable:
 				continue
 
 			visited[next] = true
 			frontier.push_back(next)
 
 	return false
+
+func _count_connected_center_tiles(map_data: MapData, start: Vector2i, center_targets: Dictionary) -> int:
+	var frontier: Array[Vector2i] = [start]
+	var visited := {start: true}
+	var count: int = 0
+	while not frontier.is_empty():
+		var current: Vector2i = frontier.pop_front()
+		if not center_targets.has(current):
+			continue
+		count += 1
+		for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+			var next: Vector2i = current + direction
+			if visited.has(next):
+				continue
+			if not center_targets.has(next):
+				continue
+			visited[next] = true
+			frontier.push_back(next)
+	return count

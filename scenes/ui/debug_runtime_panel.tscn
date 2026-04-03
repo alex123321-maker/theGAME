@@ -50,7 +50,7 @@ layout_mode = 2
 
 [node name="EntryCountLabel" type="Label" parent="Panel/Root/Body/LayoutRow"]
 layout_mode = 2
-text = "Roads"
+text = "Approaches"
 
 [node name="EntryCountInput" type="LineEdit" parent="Panel/Root/Body/LayoutRow" unique_name_in_owner=true]
 layout_mode = 2
@@ -59,7 +59,7 @@ text = "3"
 
 [node name="VillageTileCountLabel" type="Label" parent="Panel/Root/Body/LayoutRow"]
 layout_mode = 2
-text = "Village Tiles"
+text = "Center Area"
 
 [node name="VillageTileCountInput" type="LineEdit" parent="Panel/Root/Body/LayoutRow" unique_name_in_owner=true]
 layout_mode = 2

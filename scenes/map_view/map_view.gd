@@ -228,20 +228,36 @@ func _update_runtime_panel() -> void:
 func _format_validation_report(report: Dictionary) -> String:
 	var metrics: Dictionary = report.get("metrics", {})
 	var errors: Array = report.get("errors", [])
+	var stages: Array = report.get("stages", [])
+	var summary: Dictionary = _map_data.generation_summary if _map_data != null else {}
 	var lines: Array[String] = []
 	lines.append("profile_id=%s" % run_context.current_profile_id)
 	lines.append("generator_version=%d" % GameConfigData.GENERATOR_VERSION)
-	lines.append("requested_entry_count=%d" % int(_last_generation_config.get("entry_count", 0)))
+	lines.append("composition=%s" % String(summary.get("composition_template_id", _map_data.composition_template_id if _map_data != null else "unknown")))
+	lines.append("requested_entries=%d" % int(_last_generation_config.get("entry_count", 0)))
 	lines.append("entry_points=%d" % int(metrics.get("entry_count", 0)))
-	lines.append("requested_village_tiles=%d" % int(_last_generation_config.get("village_tile_count", 0)))
-	lines.append("village_tiles=%d" % int(metrics.get("central_zone_tile_count", 0)))
+	lines.append("requested_center_area=%d" % int(_last_generation_config.get("village_tile_count", 0)))
+	lines.append("center_tiles=%d" % int(metrics.get("central_zone_tile_count", 0)))
+	lines.append("connected_center_tiles=%d" % int(metrics.get("connected_center_tiles", 0)))
 	lines.append("reachable_entries=%d" % int(metrics.get("reachable_entries", 0)))
+	lines.append("road_tiles=%d" % int(metrics.get("road_tile_count", 0)))
+	lines.append("water_tiles=%d" % int(metrics.get("water_tile_count", 0)))
+	lines.append("blocker_tiles=%d" % int(metrics.get("blocker_tile_count", 0)))
+	lines.append("buildable_tiles=%d" % int(metrics.get("buildable_tiles", 0)))
 	lines.append("buildable_in_center_pct=%.1f" % float(metrics.get("buildable_in_center_pct", 0.0)))
 	if errors.is_empty():
 		lines.append("errors: none")
 	else:
 		for item in errors:
 			lines.append("error: %s" % String(item))
+	for stage in stages:
+		lines.append(
+			"stage[%s]=%s%s" % [
+				String(stage.get("stage", "unknown")),
+				"ok" if bool(stage.get("ok", false)) else "fail",
+				"" if String(stage.get("reason", "")).is_empty() else " (%s)" % String(stage.get("reason", "")),
+			]
+		)
 	return "\n".join(lines)
 
 func _export_json_file() -> String:
@@ -266,6 +282,7 @@ func _print_diagnostics_to_console() -> void:
 		return
 	print("=== MAP DIAGNOSTICS ===")
 	print("seed=", _map_data.seed, " profile=", _map_data.profile_id, " version=", _map_data.generator_version)
+	print("summary=", JSON.stringify(_map_data.generation_summary, "\t"))
 	print(JSON.stringify(_map_data.validation_report, "\t"))
 	if run_context.reference_seeds.size() >= 10:
 		var output_dir := "user://screenshots/reference"
