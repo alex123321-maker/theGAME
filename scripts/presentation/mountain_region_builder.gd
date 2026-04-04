@@ -14,6 +14,8 @@ const SHORE_TOP_FLARE_DEPTH: float = 0.95
 const MIN_GEOMETRY_PUSH_DELTA: float = 0.03
 const MIN_TRIANGLE_AREA_SQ: float = 0.0000005
 const TOP_BLOCK_PUSH_MULTIPLIER: float = 0.30
+const SMOOTH_GROUP_TOP: int = 0
+const SMOOTH_GROUP_CLIFF: int = 1
 
 func build_profiles(map_data: MapData) -> Array[Dictionary]:
 	var raw_regions: Dictionary = {}
@@ -1087,47 +1089,47 @@ func _add_blocky_top_face(
 			var p_c: Vector3 = tp_u1.lerp(bp_u1, v1) + Vector3.UP * push
 			var p_d: Vector3 = tp_u1.lerp(bp_u1, v0) + Vector3.UP * push
 			
-			_add_quad(surface, p_a, color, p_b, color, p_c, color, p_d, color)
+			_add_quad(surface, p_a, color, p_b, color, p_c, color, p_d, color, SMOOTH_GROUP_TOP)
 			
 			if x > 0 and (push - float(pushes[y][x-1])) > MIN_GEOMETRY_PUSH_DELTA:
 				var prev_push: float = pushes[y][x-1]
 				var p_prev_a: Vector3 = p_a - Vector3.UP * (push - prev_push)
 				var p_prev_b: Vector3 = p_b - Vector3.UP * (push - prev_push)
-				_add_quad(surface, p_a, color, p_prev_a, color, p_prev_b, color, p_b, color)
+				_add_quad(surface, p_a, color, p_prev_a, color, p_prev_b, color, p_b, color, SMOOTH_GROUP_CLIFF)
 			elif x == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_prev_a: Vector3 = p_a - Vector3.UP * push
 				var p_prev_b: Vector3 = p_b - Vector3.UP * push
-				_add_quad(surface, p_a, color, p_prev_a, color, p_prev_b, color, p_b, color)
+				_add_quad(surface, p_a, color, p_prev_a, color, p_prev_b, color, p_b, color, SMOOTH_GROUP_CLIFF)
 
 			if x < segments - 1 and (push - float(pushes[y][x+1])) > MIN_GEOMETRY_PUSH_DELTA:
 				var next_push: float = pushes[y][x+1]
 				var p_next_d: Vector3 = p_d - Vector3.UP * (push - next_push)
 				var p_next_c: Vector3 = p_c - Vector3.UP * (push - next_push)
-				_add_quad(surface, p_c, color, p_next_c, color, p_next_d, color, p_d, color)
+				_add_quad(surface, p_c, color, p_next_c, color, p_next_d, color, p_d, color, SMOOTH_GROUP_CLIFF)
 			elif x == segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_next_d: Vector3 = p_d - Vector3.UP * push
 				var p_next_c: Vector3 = p_c - Vector3.UP * push
-				_add_quad(surface, p_c, color, p_next_c, color, p_next_d, color, p_d, color)
+				_add_quad(surface, p_c, color, p_next_c, color, p_next_d, color, p_d, color, SMOOTH_GROUP_CLIFF)
 
 			if y > 0 and (push - float(pushes[y-1][x])) > MIN_GEOMETRY_PUSH_DELTA:
 				var top_push: float = pushes[y-1][x]
 				var p_top_a: Vector3 = p_a - Vector3.UP * (push - top_push)
 				var p_top_d: Vector3 = p_d - Vector3.UP * (push - top_push)
-				_add_quad(surface, p_d, color, p_top_d, color, p_top_a, color, p_a, color)
+				_add_quad(surface, p_d, color, p_top_d, color, p_top_a, color, p_a, color, SMOOTH_GROUP_CLIFF)
 			elif y == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_top_a: Vector3 = p_a - Vector3.UP * push
 				var p_top_d: Vector3 = p_d - Vector3.UP * push
-				_add_quad(surface, p_d, color, p_top_d, color, p_top_a, color, p_a, color)
+				_add_quad(surface, p_d, color, p_top_d, color, p_top_a, color, p_a, color, SMOOTH_GROUP_CLIFF)
 
 			if y < segments - 1 and (push - float(pushes[y+1][x])) > MIN_GEOMETRY_PUSH_DELTA:
 				var bot_push: float = pushes[y+1][x]
 				var p_bot_b: Vector3 = p_b - Vector3.UP * (push - bot_push)
 				var p_bot_c: Vector3 = p_c - Vector3.UP * (push - bot_push)
-				_add_quad(surface, p_b, color, p_bot_b, color, p_bot_c, color, p_c, color)
+				_add_quad(surface, p_b, color, p_bot_b, color, p_bot_c, color, p_c, color, SMOOTH_GROUP_CLIFF)
 			elif y == segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_bot_b: Vector3 = p_b - Vector3.UP * push
 				var p_bot_c: Vector3 = p_c - Vector3.UP * push
-				_add_quad(surface, p_b, color, p_bot_b, color, p_bot_c, color, p_c, color)
+				_add_quad(surface, p_b, color, p_bot_b, color, p_bot_c, color, p_c, color, SMOOTH_GROUP_CLIFF)
 
 func _add_cliff_face(
 	surface: SurfaceTool,
@@ -1158,7 +1160,8 @@ func _add_cliff_face(
 			base_b,
 			_vertex_color(_ground_sample(top_b_sample)),
 			base_a,
-			_vertex_color(_ground_sample(top_a_sample))
+			_vertex_color(_ground_sample(top_a_sample)),
+			SMOOTH_GROUP_CLIFF
 		)
 		return
 	
@@ -1212,47 +1215,47 @@ func _add_cliff_face(
 			var p_c: Vector3 = tp_u1.lerp(bp_u1, v1) + outward * push
 			var p_d: Vector3 = tp_u0.lerp(bp_u0, v1) + outward * push
 			
-			_add_quad(surface, p_a, color, p_b, color, p_c, color, p_d, color)
+			_add_quad(surface, p_a, color, p_b, color, p_c, color, p_d, color, SMOOTH_GROUP_CLIFF)
 			
 			if x > 0 and (push - float(grid_pushes[y][x-1])) > MIN_GEOMETRY_PUSH_DELTA:
 				var prev_push: float = grid_pushes[y][x-1]
 				var p_prev_a: Vector3 = p_a - outward * (push - prev_push)
 				var p_prev_d: Vector3 = p_d - outward * (push - prev_push)
-				_add_quad(surface, p_prev_a, color, p_a, color, p_d, color, p_prev_d, color)
+				_add_quad(surface, p_prev_a, color, p_a, color, p_d, color, p_prev_d, color, SMOOTH_GROUP_CLIFF)
 			elif x == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_prev_a: Vector3 = p_a - outward * push
 				var p_prev_d: Vector3 = p_d - outward * push
-				_add_quad(surface, p_prev_a, color, p_a, color, p_d, color, p_prev_d, color)
+				_add_quad(surface, p_prev_a, color, p_a, color, p_d, color, p_prev_d, color, SMOOTH_GROUP_CLIFF)
 			
 			if x < horizontal_segments - 1 and (push - float(grid_pushes[y][x+1])) > MIN_GEOMETRY_PUSH_DELTA:
 				var next_push: float = grid_pushes[y][x+1]
 				var p_next_b: Vector3 = p_b - outward * (push - next_push)
 				var p_next_c: Vector3 = p_c - outward * (push - next_push)
-				_add_quad(surface, p_b, color, p_next_b, color, p_next_c, color, p_c, color)
+				_add_quad(surface, p_b, color, p_next_b, color, p_next_c, color, p_c, color, SMOOTH_GROUP_CLIFF)
 			elif x == horizontal_segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_next_b: Vector3 = p_b - outward * push
 				var p_next_c: Vector3 = p_c - outward * push
-				_add_quad(surface, p_b, color, p_next_b, color, p_next_c, color, p_c, color)
+				_add_quad(surface, p_b, color, p_next_b, color, p_next_c, color, p_c, color, SMOOTH_GROUP_CLIFF)
 			
 			if y > 0 and (push - float(grid_pushes[y-1][x])) > MIN_GEOMETRY_PUSH_DELTA:
 				var top_push: float = grid_pushes[y-1][x]
 				var p_top_a: Vector3 = p_a - outward * (push - top_push)
 				var p_top_b: Vector3 = p_b - outward * (push - top_push)
-				_add_quad(surface, p_top_a, color, p_top_b, color, p_b, color, p_a, color)
+				_add_quad(surface, p_top_a, color, p_top_b, color, p_b, color, p_a, color, SMOOTH_GROUP_CLIFF)
 			elif y == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_top_a: Vector3 = p_a - outward * push
 				var p_top_b: Vector3 = p_b - outward * push
-				_add_quad(surface, p_top_a, color, p_top_b, color, p_b, color, p_a, color)
+				_add_quad(surface, p_top_a, color, p_top_b, color, p_b, color, p_a, color, SMOOTH_GROUP_CLIFF)
 			
 			if y < vertical_segments - 1 and (push - float(grid_pushes[y+1][x])) > MIN_GEOMETRY_PUSH_DELTA:
 				var bot_push: float = grid_pushes[y+1][x]
 				var p_bot_d: Vector3 = p_d - outward * (push - bot_push)
 				var p_bot_c: Vector3 = p_c - outward * (push - bot_push)
-				_add_quad(surface, p_d, color, p_c, color, p_bot_c, color, p_bot_d, color)
+				_add_quad(surface, p_d, color, p_c, color, p_bot_c, color, p_bot_d, color, SMOOTH_GROUP_CLIFF)
 			elif y == vertical_segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
 				var p_bot_d: Vector3 = p_d - outward * push
 				var p_bot_c: Vector3 = p_c - outward * push
-				_add_quad(surface, p_d, color, p_c, color, p_bot_c, color, p_bot_d, color)
+				_add_quad(surface, p_d, color, p_c, color, p_bot_c, color, p_bot_d, color, SMOOTH_GROUP_CLIFF)
 
 func _add_quad(
 	surface: SurfaceTool,
@@ -1263,10 +1266,11 @@ func _add_quad(
 	c: Vector3,
 	c_color: Color,
 	d: Vector3,
-	d_color: Color
+	d_color: Color,
+	smooth_group: int = SMOOTH_GROUP_TOP
 ) -> void:
-	_add_triangle(surface, a, a_color, b, b_color, c, c_color)
-	_add_triangle(surface, a, a_color, c, c_color, d, d_color)
+	_add_triangle(surface, a, a_color, b, b_color, c, c_color, smooth_group)
+	_add_triangle(surface, a, a_color, c, c_color, d, d_color, smooth_group)
 
 func _add_triangle(
 	surface: SurfaceTool,
@@ -1275,11 +1279,12 @@ func _add_triangle(
 	b: Vector3,
 	b_color: Color,
 	c: Vector3,
-	c_color: Color
+	c_color: Color,
+	smooth_group: int = SMOOTH_GROUP_TOP
 ) -> void:
 	if (b - a).cross(c - a).length_squared() <= MIN_TRIANGLE_AREA_SQ:
 		return
-	surface.set_smooth_group(0)
+	surface.set_smooth_group(smooth_group)
 	surface.set_color(a_color)
 	surface.add_vertex(a)
 	surface.set_color(b_color)
