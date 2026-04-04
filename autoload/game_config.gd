@@ -1,6 +1,6 @@
 extends Node
 
-const GENERATOR_VERSION: int = 3
+const GENERATOR_VERSION: int = 4
 const DEFAULT_MAP_WIDTH: int = 96
 const DEFAULT_MAP_HEIGHT: int = 96
 const DEFAULT_ENTRY_COUNT: int = 3
@@ -17,6 +17,8 @@ const DEFAULT_ROAD_CURVATURE: float = 0.12
 const DEFAULT_MIN_BLOCKER_DISTANCE_FROM_CENTER: int = 18
 const DEFAULT_APPROACH_PADDING: int = 6
 const DEFAULT_MIN_PATH_WIDTH: int = 2
+const DEFAULT_GENERATION_ATTEMPTS: int = 5
+const DEFAULT_TARGET_QUALITY_SCORE: float = 74.0
 const MIN_ENTRY_COUNT: int = 2
 const MAX_ENTRY_COUNT: int = 4
 const MIN_VILLAGE_TILE_COUNT: int = DEFAULT_MIN_CENTER_AREA
@@ -72,4 +74,6 @@ static func build_default_generator_config() -> Dictionary:
 		"min_blocker_distance_from_center": DEFAULT_MIN_BLOCKER_DISTANCE_FROM_CENTER,
 		"approach_padding": DEFAULT_APPROACH_PADDING,
 		"minimum_path_width": DEFAULT_MIN_PATH_WIDTH,
+		"generation_attempts": DEFAULT_GENERATION_ATTEMPTS,
+		"target_quality_score": DEFAULT_TARGET_QUALITY_SCORE,
 	}

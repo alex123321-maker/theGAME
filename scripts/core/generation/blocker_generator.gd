@@ -2,6 +2,7 @@ extends RefCounted
 class_name BlockerGenerator
 
 const GenerationUtilsClass = preload("res://scripts/core/generation/generation_utils.gd")
+const GenerationMaskUtilsClass = preload("res://scripts/core/generation/generation_mask_utils.gd")
 
 func generate(map_data: MapData, rng: RandomNumberGenerator, config, composition: Dictionary) -> void:
 	var center: Vector2 = composition.get("center", Vector2(float(map_data.width) * 0.5, float(map_data.height) * 0.5))
@@ -27,9 +28,9 @@ func generate(map_data: MapData, rng: RandomNumberGenerator, config, composition
 		var preserve_disconnected_clusters: bool = blocker_type == MapTypes.BlockerType.FOREST and bool(blocker_spec.get("allow_disconnected_clusters", false))
 		if preserve_disconnected_clusters:
 			var min_component_tiles: int = max(6, int(blocker_spec.get("min_component_tiles", 10)))
-			core_points = _extract_components_above_size(core_points, min_component_tiles)
+			core_points = GenerationMaskUtilsClass.extract_components_above_size(core_points, min_component_tiles)
 		else:
-			core_points = _extract_largest_component(core_points)
+			core_points = GenerationMaskUtilsClass.extract_largest_component(core_points)
 		if core_points.size() < max(24, int(config.min_blocker_area / 6)):
 			continue
 
@@ -94,7 +95,7 @@ func _generate_spine_mass(
 		var point: Vector2i = spine_tiles[index]
 		var t: float = float(index) / maxf(1.0, float(spine_tiles.size() - 1))
 		var width: float = base_width * (0.78 + (sin(t * PI) * 0.34) + rng.randf_range(-0.12, 0.12))
-		_stamp_disc(selected, point, width, map_data)
+		GenerationMaskUtilsClass.stamp_disc(selected, point, width, map_data)
 
 	selected = _roughen_mass(
 		selected,
@@ -142,7 +143,7 @@ func _generate_metaball_mass(
 	for nucleus in nuclei:
 		var nucleus_center: Vector2 = Vector2(nucleus["center"])
 		var nucleus_radius: float = float(nucleus["radius"])
-		_stamp_disc(selected, Vector2i(roundi(nucleus_center.x), roundi(nucleus_center.y)), nucleus_radius, map_data)
+		GenerationMaskUtilsClass.stamp_disc(selected, Vector2i(roundi(nucleus_center.x), roundi(nucleus_center.y)), nucleus_radius, map_data)
 
 	var allow_disconnected_clusters: bool = bool(spec.get("allow_disconnected_clusters", false))
 	var connect_nuclei_chance: float = clampf(float(spec.get("connect_nuclei_chance", 1.0)), 0.0, 1.0)
@@ -176,7 +177,7 @@ func _generate_metaball_mass(
 			var link_radius: float = minf(float(nuclei[from_index]["radius"]), float(nuclei[to_index]["radius"])) * rng.randf_range(0.38, 0.62)
 			var link_line: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([from_center, to_center])
 			for point in link_line:
-				_stamp_disc(selected, point, link_radius, map_data)
+				GenerationMaskUtilsClass.stamp_disc(selected, point, link_radius, map_data)
 			links_used += 1
 	if not allow_disconnected_clusters and nuclei.size() > 1 and links_used == 0:
 		var fallback_from: Vector2 = Vector2(nuclei[0]["center"])
@@ -184,7 +185,7 @@ func _generate_metaball_mass(
 		var fallback_radius: float = minf(float(nuclei[0]["radius"]), float(nuclei[1]["radius"])) * 0.5
 		var fallback_line: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([fallback_from, fallback_to])
 		for point in fallback_line:
-			_stamp_disc(selected, point, fallback_radius, map_data)
+			GenerationMaskUtilsClass.stamp_disc(selected, point, fallback_radius, map_data)
 
 	selected = _roughen_mass(
 		selected,
@@ -204,17 +205,15 @@ func _build_keep_corridor_mask(map_data: MapData, composition: Dictionary, confi
 	var corridor_width: int = int(composition.get("corridor_width", maxi(config.minimum_path_width + 1, 3)))
 	var corridor_buffer: int = int(composition.get("corridor_buffer", 1))
 	var corridor_radius: int = maxi(1, int(floor(float(corridor_width) * 0.5)) + corridor_buffer)
-
-	for entry_spec in composition.get("entries", []):
-		var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
-		var axis_line: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([Vector2(entry_point), center])
-		for point in axis_line:
-			_stamp_mask(mask, point, corridor_radius, map_data)
-
-	_stamp_mask(mask, center_point, corridor_radius + 2, map_data)
-	for entry_spec in composition.get("entries", []):
-		var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
-		_stamp_mask(mask, entry_point, corridor_radius + 1, map_data)
+	mask = GenerationMaskUtilsClass.build_corridor_mask(
+		map_data,
+		composition,
+		corridor_radius,
+		true,
+		1,
+		2
+	)
+	GenerationMaskUtilsClass.stamp_mask(mask, center_point, corridor_radius + 2, map_data)
 	return mask
 
 func _sanitize_points(map_data: MapData, points: Array[Vector2i], keep_corridor_mask: Dictionary) -> Array[Vector2i]:
@@ -368,26 +367,6 @@ func _resource_for_blocker(blocker_type: int) -> int:
 		_:
 			return MapTypes.ResourceTag.NONE
 
-func _stamp_disc(selected: Dictionary, center: Vector2i, radius: float, map_data: MapData) -> void:
-	var r: int = ceili(maxf(1.0, radius))
-	for y in range(center.y - r, center.y + r + 1):
-		for x in range(center.x - r, center.x + r + 1):
-			if not map_data.is_in_bounds(x, y):
-				continue
-			var point := Vector2i(x, y)
-			if Vector2(point).distance_to(Vector2(center)) <= radius:
-				selected[point] = true
-
-func _stamp_mask(mask: Dictionary, center: Vector2i, radius: int, map_data: MapData) -> void:
-	var r: int = maxi(radius, 0)
-	for y in range(center.y - r, center.y + r + 1):
-		for x in range(center.x - r, center.x + r + 1):
-			if not map_data.is_in_bounds(x, y):
-				continue
-			var point := Vector2i(x, y)
-			if Vector2(point).distance_to(Vector2(center)) <= float(r) + 0.35:
-				mask[point] = true
-
 func _roughen_mass(selected: Dictionary, jitter: float, map_data: MapData, salt: int, blocker_type: int) -> Dictionary:
 	if selected.is_empty():
 		return selected
@@ -418,66 +397,6 @@ func _roughen_mass(selected: Dictionary, jitter: float, map_data: MapData, salt:
 	var output := {}
 	for point in smoothed:
 		output[point] = true
-	return output
-
-func _extract_largest_component(points: Array[Vector2i]) -> Array[Vector2i]:
-	var selected := {}
-	for point in points:
-		selected[point] = true
-	var visited := {}
-	var best_component: Array[Vector2i] = []
-	for key in selected.keys():
-		var point: Vector2i = key
-		if visited.has(point):
-			continue
-		var component: Array[Vector2i] = []
-		var frontier: Array[Vector2i] = [point]
-		visited[point] = true
-		while not frontier.is_empty():
-			var current: Vector2i = frontier.pop_front()
-			component.append(current)
-			for neighbor in GenerationUtilsClass.cardinal_neighbors(current):
-				if visited.has(neighbor):
-					continue
-				if not selected.has(neighbor):
-					continue
-				visited[neighbor] = true
-				frontier.append(neighbor)
-		if component.size() > best_component.size():
-			best_component = component
-	return best_component
-
-func _extract_components_above_size(points: Array[Vector2i], min_size: int) -> Array[Vector2i]:
-	if points.is_empty():
-		return []
-	var selected := {}
-	for point in points:
-		selected[point] = true
-	var visited := {}
-	var preserved := {}
-	for key in selected.keys():
-		var point: Vector2i = key
-		if visited.has(point):
-			continue
-		var component: Array[Vector2i] = []
-		var frontier: Array[Vector2i] = [point]
-		visited[point] = true
-		while not frontier.is_empty():
-			var current: Vector2i = frontier.pop_front()
-			component.append(current)
-			for neighbor in GenerationUtilsClass.cardinal_neighbors(current):
-				if visited.has(neighbor):
-					continue
-				if not selected.has(neighbor):
-					continue
-				visited[neighbor] = true
-				frontier.append(neighbor)
-		if component.size() < min_size:
-			continue
-		for item in component:
-			preserved[item] = true
-	var output: Array[Vector2i] = []
-	output.assign(preserved.keys())
 	return output
 
 func _clamp_world(point: Vector2, map_data: MapData) -> Vector2:

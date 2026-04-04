@@ -23,8 +23,8 @@ func generate(map_data: MapData, _rng: RandomNumberGenerator, config, compositio
 			_ensure_entry_tile(map_data, entry_point)
 			if not map_data.entry_points.has(entry_point):
 				map_data.entry_points.append(entry_point)
-			var attach_point: Vector2i = _closest_center_point(center_points, entry_point)
-			var spine_tiles: Array[Vector2i] = _find_path_with_fallback(map_data, entry_point, attach_point)
+			var attach_point: Vector2i = _select_attach_point(center_points, entry_point, map_data, composition)
+			var spine_tiles: Array[Vector2i] = _plan_entry_route(map_data, entry_point, attach_point, _rng, config)
 			if spine_tiles.is_empty():
 				next_pending.append(entry_spec)
 				continue
@@ -61,6 +61,29 @@ func _find_path_with_fallback(map_data: MapData, from_point: Vector2i, to_point:
 	if not path.is_empty():
 		return path
 	return _emergency_straight_path(map_data, from_point, to_point)
+
+func _plan_entry_route(
+	map_data: MapData,
+	entry_point: Vector2i,
+	attach_point: Vector2i,
+	rng: RandomNumberGenerator,
+	config
+) -> Array[Vector2i]:
+	var candidates: Array = []
+	var direct_path: Array[Vector2i] = _find_path_with_fallback(map_data, entry_point, attach_point)
+	if not direct_path.is_empty():
+		candidates.append(direct_path)
+	var curvature_strength: float = clampf(float(config.road_curvature), 0.0, 0.45)
+	if curvature_strength <= 0.01:
+		return direct_path
+	for waypoint in _route_waypoint_candidates(map_data, entry_point, attach_point, curvature_strength, rng):
+		var scenic_path: Array[Vector2i] = _find_path_via_waypoint(map_data, entry_point, attach_point, waypoint)
+		if scenic_path.is_empty():
+			continue
+		candidates.append(scenic_path)
+	if candidates.is_empty():
+		return []
+	return _best_route_candidate(candidates, entry_point, attach_point, curvature_strength)
 
 func _a_star_path(map_data: MapData, from_point: Vector2i, to_point: Vector2i, allow_soft_break: bool) -> Array[Vector2i]:
 	var start: Vector2i = _nearest_traversable_point(map_data, from_point, allow_soft_break)
@@ -99,6 +122,24 @@ func _a_star_path(map_data: MapData, from_point: Vector2i, to_point: Vector2i, a
 					open.append(next)
 					open_lookup[next] = true
 	return []
+
+func _find_path_via_waypoint(
+	map_data: MapData,
+	from_point: Vector2i,
+	to_point: Vector2i,
+	waypoint: Vector2i
+) -> Array[Vector2i]:
+	var first_leg: Array[Vector2i] = _find_path_with_fallback(map_data, from_point, waypoint)
+	if first_leg.is_empty():
+		return []
+	var second_leg: Array[Vector2i] = _find_path_with_fallback(map_data, waypoint, to_point)
+	if second_leg.is_empty():
+		return []
+	var combined: Array[Vector2i] = first_leg.duplicate()
+	for i in range(1, second_leg.size()):
+		if combined[combined.size() - 1] != second_leg[i]:
+			combined.append(second_leg[i])
+	return combined
 
 func _road_step_cost(tile, allow_soft_break: bool) -> float:
 	if tile == null:
@@ -313,6 +354,83 @@ func _closest_center_point(points: Array[Vector2i], origin: Vector2i) -> Vector2
 			best_distance = candidate_distance
 			best_point = point
 	return best_point
+
+func _select_attach_point(points: Array[Vector2i], origin: Vector2i, map_data: MapData, composition: Dictionary) -> Vector2i:
+	if points.size() <= 1:
+		return points[0]
+	var center: Vector2 = composition.get("center", Vector2(float(map_data.width) * 0.5, float(map_data.height) * 0.5))
+	var desired_direction: Vector2 = (center - Vector2(origin)).normalized()
+	if desired_direction == Vector2.ZERO:
+		desired_direction = Vector2.RIGHT
+	var best_point: Vector2i = points[0]
+	var best_score: float = -INF_COST
+	for point in points:
+		var delta: Vector2 = Vector2(point) - center
+		var radial_alignment: float = 0.0 if delta == Vector2.ZERO else delta.normalized().dot(desired_direction)
+		var distance_penalty: float = Vector2(point).distance_to(Vector2(origin)) * 0.08
+		var score: float = radial_alignment - distance_penalty
+		if score > best_score:
+			best_score = score
+			best_point = point
+	return best_point
+
+func _route_waypoint_candidates(
+	map_data: MapData,
+	entry_point: Vector2i,
+	attach_point: Vector2i,
+	curvature_strength: float,
+	rng: RandomNumberGenerator
+) -> Array[Vector2i]:
+	var candidates: Array[Vector2i] = []
+	var segment: Vector2 = Vector2(attach_point - entry_point)
+	if segment == Vector2.ZERO:
+		return candidates
+	var normal: Vector2 = Vector2(-segment.y, segment.x).normalized()
+	var base_offset: float = lerpf(4.0, 10.0, curvature_strength / 0.45)
+	for t in [0.35, 0.55]:
+		var pivot: Vector2 = Vector2(entry_point).lerp(Vector2(attach_point), t)
+		for sign in [-1.0, 1.0]:
+			var offset: float = base_offset * rng.randf_range(0.82, 1.18)
+			var candidate_vec: Vector2 = pivot + (normal * sign * offset)
+			var candidate_point := Vector2i(
+				clampi(roundi(candidate_vec.x), 1, map_data.width - 2),
+				clampi(roundi(candidate_vec.y), 1, map_data.height - 2)
+			)
+			candidate_point = _nearest_traversable_point(map_data, candidate_point, false)
+			if candidate_point == Vector2i(-1, -1):
+				continue
+			if candidate_point.distance_to(entry_point) < 8.0 or candidate_point.distance_to(attach_point) < 8.0:
+				continue
+			if not candidates.has(candidate_point):
+				candidates.append(candidate_point)
+	return candidates
+
+func _best_route_candidate(
+	candidates: Array,
+	entry_point: Vector2i,
+	attach_point: Vector2i,
+	curvature_strength: float
+) -> Array[Vector2i]:
+	var best_path: Array[Vector2i] = candidates[0]
+	var best_score: float = _route_candidate_score(best_path, entry_point, attach_point, curvature_strength)
+	for i in range(1, candidates.size()):
+		var candidate: Array[Vector2i] = candidates[i]
+		var score: float = _route_candidate_score(candidate, entry_point, attach_point, curvature_strength)
+		if score > best_score:
+			best_score = score
+			best_path = candidate
+	return best_path
+
+func _route_candidate_score(path: Array[Vector2i], entry_point: Vector2i, attach_point: Vector2i, curvature_strength: float) -> float:
+	if path.is_empty():
+		return -INF_COST
+	var direct_distance: float = maxf(1.0, float(absi(entry_point.x - attach_point.x) + absi(entry_point.y - attach_point.y)))
+	var curviness: float = float(path.size()) / direct_distance
+	var target_curviness: float = 1.03 + (curvature_strength * 0.65)
+	var curvature_fit: float = 1.0 - absf(curviness - target_curviness)
+	var max_allowed: float = 1.18 + (curvature_strength * 0.85)
+	var overshoot_penalty: float = maxf(0.0, curviness - max_allowed) * 18.0
+	return (curvature_fit * 20.0) - (float(path.size()) * 0.18) - overshoot_penalty
 
 func _paint_road(map_data: MapData, road_tiles: Array[Vector2i], seed: int, road_index: int, config) -> Dictionary:
 	var painted := {}

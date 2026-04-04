@@ -2,6 +2,7 @@ extends RefCounted
 class_name VoidFillerGenerator
 
 const GenerationUtilsClass = preload("res://scripts/core/generation/generation_utils.gd")
+const GenerationMaskUtilsClass = preload("res://scripts/core/generation/generation_mask_utils.gd")
 
 func generate(map_data: MapData, rng: RandomNumberGenerator, config, composition: Dictionary) -> void:
 	var keep_corridor_mask: Dictionary = _build_keep_corridor_mask(map_data, composition, config)
@@ -208,19 +209,19 @@ func _build_filler_shape(
 				var direction: Vector2 = Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
 				var local_center: Vector2 = Vector2(center) + (direction * rng.randf_range(0.0, 7.2))
 				var radius: float = rng.randf_range(2.6, 5.2)
-				_stamp_disc(selected, Vector2i(roundi(local_center.x), roundi(local_center.y)), radius, map_data)
+				GenerationMaskUtilsClass.stamp_disc(selected, Vector2i(roundi(local_center.x), roundi(local_center.y)), radius, map_data)
 		"rock_scree":
 			var direction: Vector2 = Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
 			var length: float = rng.randf_range(9.0, 16.0)
 			var points: Array[Vector2] = [Vector2(center), Vector2(center) + direction * length]
 			var spine: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline(points)
 			for point in spine:
-				_stamp_disc(selected, point, rng.randf_range(1.6, 2.8), map_data)
+				GenerationMaskUtilsClass.stamp_disc(selected, point, rng.randf_range(1.6, 2.8), map_data)
 		_:
-			_stamp_disc(selected, center, rng.randf_range(2.4, 5.2), map_data)
+			GenerationMaskUtilsClass.stamp_disc(selected, center, rng.randf_range(2.4, 5.2), map_data)
 			for point in GenerationUtilsClass.cardinal_neighbors(center):
 				if rng.randf() < 0.6:
-					_stamp_disc(selected, point, rng.randf_range(1.6, 2.6), map_data)
+					GenerationMaskUtilsClass.stamp_disc(selected, point, rng.randf_range(1.6, 2.6), map_data)
 
 	var points: Array[Vector2i] = []
 	for key in selected.keys():
@@ -342,38 +343,20 @@ func _build_keep_corridor_mask(map_data: MapData, composition: Dictionary, confi
 	var center_point := Vector2i(roundi(center.x), roundi(center.y))
 	var corridor_width: int = int(composition.get("corridor_width", maxi(config.minimum_path_width + 1, 3)))
 	var corridor_radius: int = maxi(1, int(floor(float(corridor_width) * 0.5)) + 1)
-	for entry_spec in composition.get("entries", []):
-		var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
-		var samples: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([Vector2(entry_point), center])
-		for sample in samples:
-			_stamp_mask(mask, sample, corridor_radius, map_data)
-		_stamp_mask(mask, entry_point, corridor_radius + 1, map_data)
-	_stamp_mask(mask, center_point, corridor_radius + 1, map_data)
+	mask = GenerationMaskUtilsClass.build_corridor_mask(
+		map_data,
+		composition,
+		corridor_radius,
+		true,
+		1,
+		1
+	)
+	GenerationMaskUtilsClass.stamp_mask(mask, center_point, corridor_radius + 1, map_data)
 	return mask
 
 func _center_point(composition: Dictionary, map_data: MapData) -> Vector2i:
 	var center: Vector2 = composition.get("center", Vector2(float(map_data.width) * 0.5, float(map_data.height) * 0.5))
 	return Vector2i(roundi(center.x), roundi(center.y))
-
-func _stamp_disc(selected: Dictionary, center: Vector2i, radius: float, map_data: MapData) -> void:
-	var r: int = ceili(maxf(1.0, radius))
-	for y in range(center.y - r, center.y + r + 1):
-		for x in range(center.x - r, center.x + r + 1):
-			if not map_data.is_in_bounds(x, y):
-				continue
-			var point := Vector2i(x, y)
-			if Vector2(point).distance_to(Vector2(center)) <= radius:
-				selected[point] = true
-
-func _stamp_mask(mask: Dictionary, center: Vector2i, radius: int, map_data: MapData) -> void:
-	var r: int = maxi(0, radius)
-	for y in range(center.y - r, center.y + r + 1):
-		for x in range(center.x - r, center.x + r + 1):
-			if not map_data.is_in_bounds(x, y):
-				continue
-			var point := Vector2i(x, y)
-			if Vector2(point).distance_to(Vector2(center)) <= float(r) + 0.2:
-				mask[point] = true
 
 func _is_open_candidate_tile(tile) -> bool:
 	if tile == null:

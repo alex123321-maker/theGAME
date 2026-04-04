@@ -16,6 +16,7 @@ Godot `4.6.1` project for deterministic procedural village map generation.
   - `Log`
 - Debug overlays and tile hover selection work in isometric view.
 - Reference seed regression set contains at least 10 seeds.
+- Generation now evaluates multiple deterministic attempts per seed and keeps the highest-quality result.
 
 ## Main Paths
 
@@ -43,3 +44,8 @@ Godot `4.6.1` project for deterministic procedural village map generation.
 - Renderer changes do not mutate `MapData`.
 - Generation remains seed-deterministic for fixed engine + generator version.
 - Runtime regeneration should not require scene reload.
+
+## Validation
+
+- Reference seed batch validation:
+  - `Godot_v4.6.1-stable_win64_console.exe --path . --headless --quit --script tests/validators/map_generation_batch_runner.gd`

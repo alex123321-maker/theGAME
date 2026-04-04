@@ -2,6 +2,7 @@ extends RefCounted
 class_name WaterGenerator
 
 const GenerationUtilsClass = preload("res://scripts/core/generation/generation_utils.gd")
+const GenerationMaskUtilsClass = preload("res://scripts/core/generation/generation_mask_utils.gd")
 const INF_COST: float = 1_000_000.0
 
 func generate(map_data: MapData, rng: RandomNumberGenerator, config, composition: Dictionary) -> bool:
@@ -109,7 +110,7 @@ func _generate_basin_points(
 			"center": basin_center,
 			"radius": basin_radius,
 		})
-		_stamp_disc(selected, Vector2i(roundi(basin_center.x), roundi(basin_center.y)), basin_radius, map_data)
+		GenerationMaskUtilsClass.stamp_disc(selected, Vector2i(roundi(basin_center.x), roundi(basin_center.y)), basin_radius, map_data)
 
 	for i in range(1, basins.size()):
 		var prev_center: Vector2 = Vector2(basins[i - 1]["center"])
@@ -117,7 +118,7 @@ func _generate_basin_points(
 		var link_radius: float = minf(float(basins[i - 1]["radius"]), float(basins[i]["radius"])) * rng.randf_range(0.24, 0.42)
 		var seam_line: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([prev_center, current_center])
 		for point in seam_line:
-			_stamp_disc(selected, point, link_radius, map_data)
+			GenerationMaskUtilsClass.stamp_disc(selected, point, link_radius, map_data)
 
 	selected = _roughen(selected, jitter, map_data, int(center.x * 13.0 + center.y * 19.0))
 	var points: Array[Vector2i] = []
@@ -188,7 +189,7 @@ func _generate_river_points(
 		var sway: float = 0.5 + (sin((t * PI * 2.0) + rng.randf_range(-0.4, 0.4)) * 0.22)
 		var width: float = lerpf(width_min, width_max, clampf(sway, 0.0, 1.0))
 		width += rng.randf_range(-0.22, 0.22)
-		_stamp_disc(selected, point, maxf(1.6, width), map_data)
+		GenerationMaskUtilsClass.stamp_disc(selected, point, maxf(1.6, width), map_data)
 
 	selected = _roughen(selected, float(water_spec.get("jitter", 0.12)), map_data, int(center.x * 31.0 + center.y * 17.0))
 	var points: Array[Vector2i] = []
@@ -213,10 +214,10 @@ func _attach_river_basin(
 	var axis_normal: Vector2 = _axis_normal(points, pivot_index)
 	var basin_center: Vector2 = Vector2(pivot) + axis_normal * rng.randf_range(2.0, 5.0)
 	var basin_radius: float = rng.randf_range(4.5, 7.8) * float(water_spec.get("size_bias", 1.0))
-	_stamp_disc(selected, Vector2i(roundi(basin_center.x), roundi(basin_center.y)), basin_radius, map_data)
+	GenerationMaskUtilsClass.stamp_disc(selected, Vector2i(roundi(basin_center.x), roundi(basin_center.y)), basin_radius, map_data)
 	var connector: Array[Vector2i] = GenerationUtilsClass.rasterize_polyline([Vector2(pivot), basin_center])
 	for point in connector:
-		_stamp_disc(selected, point, basin_radius * 0.34, map_data)
+		GenerationMaskUtilsClass.stamp_disc(selected, point, basin_radius * 0.34, map_data)
 	var output: Array[Vector2i] = []
 	output.assign(selected.keys())
 	return _sanitize_points(map_data, output, keep_corridor_mask)
@@ -261,7 +262,7 @@ func _attach_river_branch(
 	for index in range(branch_path.size()):
 		var t: float = float(index) / maxf(1.0, float(branch_path.size() - 1))
 		var width: float = lerpf(width_min, width_max, 0.5 + (sin(t * PI) * 0.18))
-		_stamp_disc(selected, branch_path[index], maxf(1.4, width), map_data)
+		GenerationMaskUtilsClass.stamp_disc(selected, branch_path[index], maxf(1.4, width), map_data)
 	var output: Array[Vector2i] = []
 	output.assign(selected.keys())
 	return _sanitize_points(map_data, output, keep_corridor_mask)
@@ -514,10 +515,15 @@ func _build_keep_corridor_mask(map_data: MapData, composition: Dictionary, confi
 	var center: Vector2 = composition.get("center", Vector2(float(map_data.width) * 0.5, float(map_data.height) * 0.5))
 	var corridor_width: int = int(composition.get("corridor_width", maxi(config.minimum_path_width + 1, 3)))
 	var radius: int = maxi(1, int(floor(float(corridor_width) * 0.5)) + 2)
-	for entry_spec in composition.get("entries", []):
-		var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
-		_stamp_mask(mask, entry_point, radius + 2, map_data)
-	_stamp_mask(mask, Vector2i(roundi(center.x), roundi(center.y)), radius + 3, map_data)
+	mask = GenerationMaskUtilsClass.build_corridor_mask(
+		map_data,
+		composition,
+		radius,
+		false,
+		2,
+		3
+	)
+	GenerationMaskUtilsClass.stamp_mask(mask, Vector2i(roundi(center.x), roundi(center.y)), radius + 3, map_data)
 	return mask
 
 func _sanitize_points(map_data: MapData, points: Array[Vector2i], keep_corridor_mask: Dictionary) -> Array[Vector2i]:
@@ -551,26 +557,6 @@ func _trim_to_target(points: Array[Vector2i], center: Vector2, max_count: int) -
 		trimmed.append(sorted[i])
 	return trimmed
 
-func _stamp_disc(selected: Dictionary, center: Vector2i, radius: float, map_data: MapData) -> void:
-	var r: int = ceili(maxf(1.0, radius))
-	for y in range(center.y - r, center.y + r + 1):
-		for x in range(center.x - r, center.x + r + 1):
-			if not map_data.is_in_bounds(x, y):
-				continue
-			var point := Vector2i(x, y)
-			if Vector2(point).distance_to(Vector2(center)) <= radius:
-				selected[point] = true
-
-func _stamp_mask(mask: Dictionary, center: Vector2i, radius: int, map_data: MapData) -> void:
-	var r: int = maxi(radius, 0)
-	for y in range(center.y - r, center.y + r + 1):
-		for x in range(center.x - r, center.x + r + 1):
-			if not map_data.is_in_bounds(x, y):
-				continue
-			var point := Vector2i(x, y)
-			if Vector2(point).distance_to(Vector2(center)) <= float(r) + 0.2:
-				mask[point] = true
-
 func _roughen(selected: Dictionary, jitter: float, map_data: MapData, salt: int) -> Dictionary:
 	if selected.is_empty():
 		return selected
@@ -586,8 +572,7 @@ func _roughen(selected: Dictionary, jitter: float, map_data: MapData, salt: int)
 		var noise: float = float(GenerationUtilsClass.hash2d(point.x, point.y, salt) % 1000) / 1000.0
 		if noise < jitter * 0.56:
 			result.erase(point)
-	var points: Array[Vector2i] = []
-	points.assign(result.keys())
+	var points: Array[Vector2i] = GenerationMaskUtilsClass.points_from_lookup(result)
 	var smoothed: Array[Vector2i] = GenerationUtilsClass.smooth_points(map_data, points, 2, 3)
 	var output := {}
 	for point in smoothed:
@@ -595,31 +580,7 @@ func _roughen(selected: Dictionary, jitter: float, map_data: MapData, salt: int)
 	return output
 
 func _extract_largest_component(points: Array[Vector2i]) -> Array[Vector2i]:
-	var selected := {}
-	for point in points:
-		selected[point] = true
-	var visited := {}
-	var best_component: Array[Vector2i] = []
-	for key in selected.keys():
-		var point: Vector2i = key
-		if visited.has(point):
-			continue
-		var component: Array[Vector2i] = []
-		var frontier: Array[Vector2i] = [point]
-		visited[point] = true
-		while not frontier.is_empty():
-			var current: Vector2i = frontier.pop_front()
-			component.append(current)
-			for neighbor in GenerationUtilsClass.cardinal_neighbors(current):
-				if visited.has(neighbor):
-					continue
-				if not selected.has(neighbor):
-					continue
-				visited[neighbor] = true
-				frontier.append(neighbor)
-		if component.size() > best_component.size():
-			best_component = component
-	return best_component
+	return GenerationMaskUtilsClass.extract_largest_component(points)
 
 func _clamp_world(point: Vector2, map_data: MapData) -> Vector2:
 	return Vector2(

@@ -205,7 +205,14 @@ func _generate_current_map(reason: String) -> void:
 	_update_hover_from_mouse()
 
 	_update_runtime_panel()
-	runtime_panel.set_status_message("Map generated (%s)." % reason)
+	runtime_panel.set_status_message(
+		"Map generated (%s). Quality %.1f, attempt %d/%d." % [
+			reason,
+			float(_map_data.validation_report.get("quality_score", 0.0)),
+			int(_map_data.generation_summary.get("attempt_index", 0)) + 1,
+			int(_map_data.generation_summary.get("attempt_count", 1)),
+		]
+	)
 
 func _update_runtime_panel() -> void:
 	if _map_data == null:
@@ -235,6 +242,13 @@ func _format_validation_report(report: Dictionary) -> String:
 	lines.append("profile_id=%s" % run_context.current_profile_id)
 	lines.append("generator_version=%d" % GameConfigData.GENERATOR_VERSION)
 	lines.append("composition=%s" % String(summary.get("composition_template_id", _map_data.composition_template_id if _map_data != null else "unknown")))
+	lines.append("quality=%.1f (%s)" % [float(report.get("quality_score", 0.0)), String(report.get("quality_tier", "unknown"))])
+	lines.append(
+		"attempt=%d/%d" % [
+			int(summary.get("attempt_index", 0)) + 1,
+			int(summary.get("attempt_count", 1)),
+		]
+	)
 	lines.append("requested_entries=%d" % int(_last_generation_config.get("entry_count", 0)))
 	lines.append("entry_points=%d" % int(metrics.get("entry_count", 0)))
 	lines.append("requested_center_area=%d" % int(_last_generation_config.get("village_tile_count", 0)))
