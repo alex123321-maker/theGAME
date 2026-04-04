@@ -42,6 +42,7 @@ var _material_cache: Dictionary = {}
 var _mountain_builder := MountainRegionBuilderClass.new()
 var _mountain_material: ShaderMaterial
 var _mountain_ramp_texture: GradientTexture1D
+var _mountain_light_direction: Vector3 = Vector3(0.61, 0.50, 0.61).normalized()
 
 func _ready() -> void:
 	_surface_root = _ensure_layer("SurfaceRoot")
@@ -89,6 +90,13 @@ func set_overlay_mode(mode: String) -> void:
 	overlay_mode = mode
 	if _debug_overlay != null:
 		_debug_overlay.set_overlay_mode(mode)
+
+func set_mountain_light_direction(direction: Vector3) -> void:
+	if direction.length_squared() <= 0.00001:
+		return
+	_mountain_light_direction = direction.normalized()
+	if _mountain_material != null:
+		_mountain_material.set_shader_parameter("light_direction", _mountain_light_direction)
 
 func set_hover_tile(logical: Vector2i, is_valid: bool) -> void:
 	if _hover_mesh == null:
@@ -222,7 +230,11 @@ func _build_decor_layer() -> void:
 	for tile in map_data.tiles:
 		if tile.is_road or tile.is_water or tile.is_blocked:
 			continue
-		if tile.region_type == MapTypes.RegionType.BLOCKER_MASS and (tile.debug_tags.has("rock_edge") or tile.debug_tags.has("rock_core")):
+		if tile.region_type == MapTypes.RegionType.BLOCKER_MASS and (
+			tile.rock_role != MapTypes.RockRole.NONE
+			or tile.debug_tags.has("rock_edge")
+			or tile.debug_tags.has("rock_core")
+		):
 			continue
 		if tile.base_terrain_type == MapTypes.TerrainType.CLEARING:
 			continue
@@ -435,16 +447,17 @@ func _mountain_surface_material() -> ShaderMaterial:
 	_mountain_material = ShaderMaterial.new()
 	_mountain_material.shader = MountainSurfaceShader
 	_mountain_material.set_shader_parameter("light_ramp", _mountain_ramp())
+	_mountain_material.set_shader_parameter("light_direction", _mountain_light_direction)
 	return _mountain_material
 
 func _mountain_ramp() -> GradientTexture1D:
 	if _mountain_ramp_texture != null:
 		return _mountain_ramp_texture
 	var gradient := Gradient.new()
-	gradient.add_point(0.0, Color(0.18, 0.18, 0.18, 1.0))
-	gradient.add_point(0.24, Color(0.34, 0.34, 0.34, 1.0))
-	gradient.add_point(0.48, Color(0.58, 0.58, 0.58, 1.0))
-	gradient.add_point(0.76, Color(0.82, 0.82, 0.82, 1.0))
+	gradient.add_point(0.0, Color(0.12, 0.12, 0.12, 1.0))
+	gradient.add_point(0.22, Color(0.28, 0.28, 0.28, 1.0))
+	gradient.add_point(0.50, Color(0.60, 0.60, 0.60, 1.0))
+	gradient.add_point(0.78, Color(0.86, 0.86, 0.86, 1.0))
 	gradient.add_point(1.0, Color(1.0, 1.0, 1.0, 1.0))
 	_mountain_ramp_texture = GradientTexture1D.new()
 	_mountain_ramp_texture.gradient = gradient
@@ -519,7 +532,7 @@ func _decor_density(tile) -> float:
 	if tile.base_terrain_type == MapTypes.TerrainType.FOREST:
 		return 0.14 if tile.debug_tags.has("forest_fringe") else 0.07
 	if tile.base_terrain_type == MapTypes.TerrainType.ROCK:
-		return 0.11 if tile.debug_tags.has("rock_edge") else 0.05
+		return 0.11 if tile.rock_role == MapTypes.RockRole.FOOT or tile.rock_role == MapTypes.RockRole.TALUS or tile.debug_tags.has("rock_edge") else 0.05
 	if _is_near_road_tile(tile.x, tile.y):
 		return 0.05
 	return 0.015

@@ -7,7 +7,8 @@ const MapSerializerClass = preload("res://scripts/core/map/map_serializer.gd")
 const MapTestRunnerClass = preload("res://scripts/map_test_runner.gd")
 
 @onready var camera: Camera3D = $Camera3D
-@onready var map_renderer: Node3D = $MapRenderer3D
+@onready var map_renderer: MapRenderer3D = $MapRenderer3D
+@onready var sun_light: DirectionalLight3D = $DirectionalLight3D
 @onready var runtime_panel: DebugRuntimePanel = $CanvasLayer/DebugRuntimePanel
 @onready var run_context = get_node("/root/RunContext")
 @onready var debug_bus = get_node("/root/DebugBus")
@@ -23,6 +24,7 @@ func _ready() -> void:
 	_connect_debug_bus()
 	_connect_runtime_panel()
 	_connect_run_context()
+	_sync_mountain_light()
 	var default_config: Dictionary = GameConfigData.build_default_generator_config()
 	runtime_panel.set_generation_controls(
 		int(default_config.get("entry_count", GameConfigData.DEFAULT_ENTRY_COUNT)),
@@ -199,6 +201,7 @@ func _generate_current_map(reason: String) -> void:
 		_camera_initialized = true
 
 	map_renderer.set_map_data(_map_data)
+	_sync_mountain_light()
 	map_renderer.set_grid_visible(run_context.is_grid_visible)
 	map_renderer.set_props_visible(run_context.is_props_visible)
 	map_renderer.set_overlay_mode(run_context.current_overlay_mode)
@@ -332,6 +335,11 @@ func export_current_map_json() -> String:
 	if _map_data == null:
 		return ""
 	return _serializer.to_json_text(_map_data)
+
+func _sync_mountain_light() -> void:
+	if map_renderer == null or sun_light == null:
+		return
+	map_renderer.set_mountain_light_direction(sun_light.global_transform.basis.z.normalized())
 
 func _build_generation_config() -> Dictionary:
 	var config := GameConfigData.build_default_generator_config()

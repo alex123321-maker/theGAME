@@ -36,6 +36,22 @@ enum BlockerType {
 	RAVINE,
 }
 
+enum RockRole {
+	NONE,
+	FOOT,
+	TALUS,
+	SHELF,
+	WALL,
+	SUMMIT,
+}
+
+enum RockSummitProfile {
+	NONE,
+	PEAK,
+	PLATEAU,
+	BROKEN_TOP,
+}
+
 enum RoadWidthClass {
 	NONE,
 	NARROW,
@@ -125,6 +141,32 @@ static func blocker_name(value: int) -> String:
 			return "rock"
 		BlockerType.RAVINE:
 			return "ravine"
+		_:
+			return "none"
+
+static func rock_role_name(value: int) -> String:
+	match value:
+		RockRole.FOOT:
+			return "foot"
+		RockRole.TALUS:
+			return "talus"
+		RockRole.SHELF:
+			return "shelf"
+		RockRole.WALL:
+			return "wall"
+		RockRole.SUMMIT:
+			return "summit"
+		_:
+			return "none"
+
+static func rock_summit_profile_name(value: int) -> String:
+	match value:
+		RockSummitProfile.PEAK:
+			return "peak"
+		RockSummitProfile.PLATEAU:
+			return "plateau"
+		RockSummitProfile.BROKEN_TOP:
+			return "broken_top"
 		_:
 			return "none"
 

@@ -9,12 +9,15 @@ const MIN_VISIBLE_HEIGHT: float = 0.04
 func build_profiles(map_data: MapData) -> Array[Dictionary]:
 	var raw_regions: Dictionary = {}
 	var region_labels: Dictionary = {}
+	var region_metadata: Dictionary = {}
 	for raw_region in map_data.regions:
 		var region: Dictionary = raw_region
 		var metadata: Dictionary = region.get("metadata", {})
 		if int(metadata.get("blocker_type", MapTypes.BlockerType.NONE)) != MapTypes.BlockerType.ROCK:
 			continue
-		region_labels[int(region.get("id", 0))] = String(region.get("label", "rock_region"))
+		var region_id: int = int(region.get("id", 0))
+		region_labels[region_id] = String(region.get("label", "rock_region"))
+		region_metadata[region_id] = metadata.duplicate(true)
 
 	for raw_tile in map_data.tiles:
 		var tile = raw_tile
@@ -35,6 +38,9 @@ func build_profiles(map_data: MapData) -> Array[Dictionary]:
 				"cell_set": {},
 				"core_set": {},
 				"edge_set": {},
+				"metadata": region_metadata.get(region_id, {}).duplicate(true),
+				"role_map": {},
+				"summit_profile_votes": {},
 			}
 		var profile: Dictionary = raw_regions[region_id]
 		var cells: Array = profile["cells"]
@@ -42,13 +48,24 @@ func build_profiles(map_data: MapData) -> Array[Dictionary]:
 		if not cell_set.has(point):
 			cells.append(point)
 			cell_set[point] = true
-		if tile.blocker_type == MapTypes.BlockerType.ROCK or tile.debug_tags.has("rock_core"):
+		var role_map: Dictionary = profile["role_map"]
+		if int(tile.rock_role) != MapTypes.RockRole.NONE:
+			role_map[point] = int(tile.rock_role)
+		if int(tile.rock_summit_profile) != MapTypes.RockSummitProfile.NONE:
+			var votes: Dictionary = profile["summit_profile_votes"]
+			votes[int(tile.rock_summit_profile)] = int(votes.get(int(tile.rock_summit_profile), 0)) + 1
+
+		var is_explicit_core: bool = int(tile.rock_role) == MapTypes.RockRole.WALL \
+			or int(tile.rock_role) == MapTypes.RockRole.SHELF \
+			or int(tile.rock_role) == MapTypes.RockRole.SUMMIT
+		if tile.blocker_type == MapTypes.BlockerType.ROCK or is_explicit_core or tile.debug_tags.has("rock_core"):
 			var core_cells: Array = profile["core_cells"]
 			var core_set: Dictionary = profile["core_set"]
 			if not core_set.has(point):
 				core_cells.append(point)
 				core_set[point] = true
-		if tile.debug_tags.has("rock_edge"):
+		var is_explicit_edge: bool = int(tile.rock_role) == MapTypes.RockRole.FOOT or int(tile.rock_role) == MapTypes.RockRole.TALUS
+		if is_explicit_edge or tile.debug_tags.has("rock_edge"):
 			var edge_cells: Array = profile["edge_cells"]
 			var edge_set: Dictionary = profile["edge_set"]
 			if not edge_set.has(point):
@@ -137,6 +154,8 @@ func _is_mountain_tile(tile, rock_region_labels: Dictionary) -> bool:
 		return false
 	if rock_region_labels.has(int(tile.region_id)):
 		return true
+	if int(tile.rock_role) != MapTypes.RockRole.NONE:
+		return true
 	return tile.blocker_type == MapTypes.BlockerType.ROCK \
 		or tile.debug_tags.has("rock_core") \
 		or tile.debug_tags.has("rock_edge")
@@ -170,13 +189,16 @@ func _finalize_profile(profile: Dictionary) -> void:
 	for value in distance_map.values():
 		max_distance = maxi(max_distance, int(value))
 
-	var profile_type: String = _classify_profile_type(axis_data, max_distance, boundary_cells.size(), cells.size())
+	var metadata: Dictionary = profile.get("metadata", {})
+	var explicit_role_map: Dictionary = profile.get("role_map", {})
+	var profile_type: String = _resolve_profile_type(metadata, axis_data, max_distance, boundary_cells.size(), cells.size())
 	var type_config: Dictionary = _type_config(profile_type, axis_data, max_distance)
+	var region_seed: int = int(profile.get("seed", 0))
+	var summit_profile: String = _resolve_summit_profile(metadata, profile, profile_type, axis_data, max_distance, cells.size(), region_seed)
 	var branches: Array = _build_secondary_branches(axis_data, type_config)
-	var peak_height: float = _peak_height(max_distance, axis_data, profile_type)
+	var peak_height: float = _peak_height(max_distance, axis_data, profile_type, summit_profile)
 	var edge_set: Dictionary = profile.get("edge_set", {})
 	var core_set: Dictionary = profile.get("core_set", {})
-	var region_seed: int = int(profile.get("seed", 0))
 
 	var context_map: Dictionary = {}
 	var height_map: Dictionary = {}
@@ -195,18 +217,26 @@ func _finalize_profile(profile: Dictionary) -> void:
 			core_set.has(cell),
 			edge_set.has(cell)
 		)
+		context["rock_role"] = int(explicit_role_map.get(cell, MapTypes.RockRole.NONE))
 		var terraced: Dictionary = _apply_terraces(
 			clampf(float(context.get("smooth01", 0.0)) + float(context.get("terrace_offset", 0.0)), 0.0, 1.0),
 			int(type_config.get("terraces", 4)),
 			float(type_config.get("terrace_softness", 0.12))
 		)
-		var height01: float = clampf(float(terraced.get("value", 0.0)), 0.0, 1.0)
-		if edge_set.has(cell):
-			height01 *= 0.78
-		height01 = maxf(height01, 0.05)
-		context["height01"] = height01
 		context["terrace_plateau"] = float(terraced.get("plateau", 0.0))
 		context["terrace_cliff"] = float(terraced.get("cliff", 0.0))
+		var height01: float = _shape_height01(
+			clampf(float(terraced.get("value", 0.0)), 0.0, 1.0),
+			context,
+			summit_profile,
+			type_config,
+			cell,
+			region_seed
+		)
+		if edge_set.has(cell):
+			height01 *= 0.72
+		height01 = maxf(height01, 0.05)
+		context["height01"] = height01
 		context_map[cell] = context
 		height_map[cell] = peak_height * height01
 
@@ -214,7 +244,7 @@ func _finalize_profile(profile: Dictionary) -> void:
 		var cell: Vector2i = raw_cell
 		var context: Dictionary = context_map.get(cell, {})
 		var relief: float = _local_relief(cell, height_map, cell_set, peak_height)
-		zone_map[cell] = _build_zone_sample(context, relief, profile_type, type_config, edge_set.has(cell))
+		zone_map[cell] = _build_zone_sample(context, relief, profile_type, summit_profile, type_config, edge_set.has(cell))
 
 	profile["center"] = center
 	profile["boundary_cells"] = boundary_cells
@@ -222,6 +252,7 @@ func _finalize_profile(profile: Dictionary) -> void:
 	profile["max_distance"] = max_distance
 	profile["axis"] = axis_data
 	profile["profile_type"] = profile_type
+	profile["summit_profile"] = summit_profile
 	profile["type_config"] = type_config
 	profile["branches"] = branches
 	profile["peak_height"] = peak_height
@@ -317,47 +348,124 @@ func _classify_profile_type(axis_data: Dictionary, max_distance: int, boundary_c
 		return "ridge"
 	return "massif"
 
+func _resolve_profile_type(
+	metadata: Dictionary,
+	axis_data: Dictionary,
+	max_distance: int,
+	boundary_count: int,
+	cell_count: int
+) -> String:
+	var explicit_profile: String = String(metadata.get("rock_mass_profile", ""))
+	if explicit_profile == "ridge" or explicit_profile == "massif":
+		return explicit_profile
+	return _classify_profile_type(axis_data, max_distance, boundary_count, cell_count)
+
+func _resolve_summit_profile(
+	metadata: Dictionary,
+	profile: Dictionary,
+	profile_type: String,
+	axis_data: Dictionary,
+	max_distance: int,
+	cell_count: int,
+	region_seed: int
+) -> String:
+	var explicit_value: int = int(metadata.get("rock_summit_profile", MapTypes.RockSummitProfile.NONE))
+	if explicit_value == MapTypes.RockSummitProfile.NONE:
+		var votes: Dictionary = profile.get("summit_profile_votes", {})
+		var best_vote: int = 0
+		for key in votes.keys():
+			var count: int = int(votes.get(key, 0))
+			if count <= best_vote:
+				continue
+			best_vote = count
+			explicit_value = int(key)
+	if explicit_value != MapTypes.RockSummitProfile.NONE:
+		return MapTypes.rock_summit_profile_name(explicit_value)
+	return _select_summit_profile(profile_type, axis_data, max_distance, cell_count, region_seed)
+
 func _type_config(profile_type: String, _axis_data: Dictionary, max_distance: int) -> Dictionary:
 	match profile_type:
 		"ridge":
 			return {
 				"terraces": 3,
-				"terrace_softness": 0.16,
-				"ridge_weight": 0.76,
-				"branch_weight": 0.14,
+				"terrace_softness": 0.10,
+				"ridge_weight": 0.84,
+				"branch_weight": 0.12,
 				"branch_count": 1 if max_distance >= 2 else 0,
-				"silhouette_amp": 0.26,
-				"body_noise": 0.05,
-				"terrace_noise": 0.12,
-				"foot_width": 0.56,
-				"cap_threshold": 0.76,
+				"silhouette_amp": 0.30,
+				"body_noise": 0.04,
+				"terrace_noise": 0.08,
+				"foot_width": 0.52,
+				"cap_threshold": 0.82,
+				"depth_curve": 1.42,
+				"body_curve": 0.90,
+				"wall_start": 0.20,
+				"wall_end": 0.72,
+				"summit_start": 0.84,
+				"foot_scale": 0.74,
 			}
 		"broken_cliff":
 			return {
 				"terraces": 3 if max_distance <= 2 else 4,
-				"terrace_softness": 0.12,
+				"terrace_softness": 0.09,
 				"ridge_weight": 0.24,
 				"branch_weight": 0.0,
 				"branch_count": 0,
-				"silhouette_amp": 0.34,
-				"body_noise": 0.06,
-				"terrace_noise": 0.16,
-				"foot_width": 0.64,
-				"cap_threshold": 0.82,
+				"silhouette_amp": 0.38,
+				"body_noise": 0.04,
+				"terrace_noise": 0.10,
+				"foot_width": 0.62,
+				"cap_threshold": 0.86,
+				"depth_curve": 1.22,
+				"body_curve": 0.96,
+				"wall_start": 0.18,
+				"wall_end": 0.74,
+				"summit_start": 0.80,
+				"foot_scale": 0.72,
 			}
 		_:
 			return {
-				"terraces": clampi(3 + max_distance, 4, 5),
-				"terrace_softness": 0.14,
-				"ridge_weight": 0.46,
-				"branch_weight": 0.28,
+				"terraces": 4 if max_distance >= 4 else 3,
+				"terrace_softness": 0.08,
+				"ridge_weight": 0.52,
+				"branch_weight": 0.32,
 				"branch_count": 2 if max_distance >= 3 else 1,
-				"silhouette_amp": 0.30,
-				"body_noise": 0.05,
-				"terrace_noise": 0.14,
-				"foot_width": 0.60,
-				"cap_threshold": 0.72,
+				"silhouette_amp": 0.34,
+				"body_noise": 0.04,
+				"terrace_noise": 0.10,
+				"foot_width": 0.58,
+				"cap_threshold": 0.74,
+				"depth_curve": 1.10,
+				"body_curve": 0.88,
+				"wall_start": 0.16,
+				"wall_end": 0.78,
+				"summit_start": 0.76,
+				"foot_scale": 0.70,
 			}
+
+func _select_summit_profile(
+	profile_type: String,
+	axis_data: Dictionary,
+	max_distance: int,
+	cell_count: int,
+	region_seed: int
+) -> String:
+	if profile_type == "ridge":
+		return "peak"
+	if profile_type == "broken_cliff":
+		return "broken_top"
+
+	var elongation: float = float(axis_data.get("elongation", 1.0))
+	var minor_span: float = float(axis_data.get("minor_span", 1.0))
+	var is_wide_mass: bool = minor_span >= 7.5 and max_distance >= 3 and cell_count >= 24
+	var is_medium_mass: bool = minor_span >= 6.0 and max_distance >= 3 and cell_count >= 18
+	var selector: int = abs(region_seed) % 100
+
+	if is_wide_mass and elongation <= 1.45:
+		return "plateau" if selector < 46 else "broken_top"
+	if is_medium_mass and elongation <= 1.75:
+		return "broken_top" if selector < 62 else "peak"
+	return "peak"
 
 func _build_secondary_branches(axis_data: Dictionary, type_config: Dictionary) -> Array:
 	var branch_count: int = int(type_config.get("branch_count", 0))
@@ -383,18 +491,25 @@ func _build_secondary_branches(axis_data: Dictionary, type_config: Dictionary) -
 		})
 	return branches
 
-func _peak_height(max_distance: int, axis_data: Dictionary, profile_type: String) -> float:
+func _peak_height(max_distance: int, axis_data: Dictionary, profile_type: String, summit_profile: String) -> float:
 	var major_span: float = float(axis_data.get("major_span", 1.0))
 	var minor_span: float = float(axis_data.get("minor_span", 1.0))
-	var base_height: float = 0.95 + (float(max_distance) * 0.78) + (major_span * 0.08) + (minor_span * 0.05)
+	var base_height: float = 1.10 + (float(max_distance) * 0.98) + (major_span * 0.12) + (minor_span * 0.09)
 	match profile_type:
 		"ridge":
-			base_height *= 0.92
+			base_height *= 0.98
 		"broken_cliff":
-			base_height *= 0.84
+			base_height *= 0.92
 		_:
+			base_height *= 1.18
+
+	match summit_profile:
+		"plateau":
 			base_height *= 1.08
-	return clampf(base_height, 1.0, 6.8)
+		"broken_top":
+			base_height *= 1.04
+
+	return clampf(base_height, 1.4, 8.8)
 
 func _build_cell_context(
 	cell: Vector2i,
@@ -432,7 +547,7 @@ func _build_cell_context(
 		var branch_value: float = 1.0 - clampf(branch_distance / branch_width, 0.0, 1.0)
 		secondary_ridge = maxf(secondary_ridge, pow(branch_value, 1.5))
 
-	var depth_curve: float = pow(depth01, 1.32)
+	var depth_curve: float = pow(depth01, float(type_config.get("depth_curve", 1.32)))
 	var smooth01: float = depth_curve * (
 		0.70
 		+ (primary_ridge * float(type_config.get("ridge_weight", 0.45)))
@@ -455,6 +570,58 @@ func _build_cell_context(
 		"smooth01": clampf(smooth01, 0.0, 1.0),
 		"terrace_offset": terrace_phase + terrace_noise + (secondary_ridge * 0.05),
 	}
+
+func _shape_height01(
+	base_height01: float,
+	context: Dictionary,
+	summit_profile: String,
+	type_config: Dictionary,
+	cell: Vector2i,
+	region_seed: int
+) -> float:
+	var height01: float = clampf(base_height01, 0.0, 1.0)
+	var rock_role: int = int(context.get("rock_role", MapTypes.RockRole.NONE))
+	var wall_mask: float = smoothstep(
+		float(type_config.get("wall_start", 0.18)),
+		float(type_config.get("wall_end", 0.78)),
+		height01
+	)
+	var body_height: float = pow(maxf(height01, 0.0), float(type_config.get("body_curve", 0.92)))
+	height01 = lerpf(height01 * float(type_config.get("foot_scale", 0.72)), body_height, wall_mask)
+
+	var ridge: float = maxf(float(context.get("primary_ridge", 0.0)), float(context.get("secondary_ridge", 0.0)) * 0.85)
+	var summit_start: float = float(type_config.get("summit_start", 0.78))
+	var summit_mask: float = smoothstep(summit_start - 0.08, 0.98, height01)
+
+	match rock_role:
+		MapTypes.RockRole.FOOT:
+			height01 *= 0.16
+		MapTypes.RockRole.TALUS:
+			height01 = lerpf(height01 * 0.22, 0.18 + ridge * 0.06, 0.74)
+		MapTypes.RockRole.SHELF:
+			height01 = maxf(height01, 0.44 + (float(context.get("terrace_plateau", 0.0)) * 0.10) + ridge * 0.05)
+		MapTypes.RockRole.WALL:
+			height01 = maxf(height01, 0.56 + ridge * 0.10)
+		MapTypes.RockRole.SUMMIT:
+			height01 = maxf(height01, 0.78 + ridge * 0.05)
+
+	match summit_profile:
+		"plateau":
+			var plateau_noise: float = (_noise_01(cell.x + 41, cell.y - 19, region_seed * 7 + 23) - 0.5) * 0.05
+			var plateau_level: float = 0.80 + (float(context.get("terrace_plateau", 0.0)) * 0.04) + (ridge * 0.03)
+			var plateau_target: float = plateau_level + (smoothstep(summit_start, 1.0, height01) * 0.11) + plateau_noise
+			height01 = lerpf(height01, clampf(plateau_target, 0.0, 0.98), summit_mask * 0.84)
+			height01 += summit_mask * 0.04
+		"broken_top":
+			var break_noise: float = (_noise_01(cell.x - 27, cell.y + 33, region_seed * 11 + 17) - 0.5) * 0.10
+			var broken_target: float = 0.79 + (smoothstep(summit_start, 1.0, height01) * 0.13) + (ridge * 0.05) + break_noise
+			height01 = lerpf(height01, clampf(broken_target, 0.0, 1.0), summit_mask * 0.66)
+			height01 += summit_mask * ridge * 0.05
+		_:
+			height01 += summit_mask * (0.05 + ridge * 0.08)
+			height01 = lerpf(height01, pow(clampf(height01, 0.0, 1.0), 0.86), summit_mask * 0.42)
+
+	return clampf(height01, 0.0, 1.0)
 
 func _apply_terraces(value: float, terraces: int, softness: float) -> Dictionary:
 	var count: int = maxi(1, terraces)
@@ -484,21 +651,63 @@ func _build_zone_sample(
 	context: Dictionary,
 	relief: float,
 	profile_type: String,
+	summit_profile: String,
 	type_config: Dictionary,
 	is_edge: bool
 ) -> Dictionary:
 	var height01: float = float(context.get("height01", 0.0))
 	var depth01: float = float(context.get("depth01", 0.0))
+	var rock_role: int = int(context.get("rock_role", MapTypes.RockRole.NONE))
 	var ridge: float = maxf(float(context.get("primary_ridge", 0.0)), float(context.get("secondary_ridge", 0.0)) * 0.85)
 	var cliff: float = clampf((relief * 1.55) + (float(context.get("terrace_cliff", 0.0)) * 0.60), 0.0, 1.0)
 	var foot_width: float = float(type_config.get("foot_width", 0.58))
 	var foot: float = clampf((foot_width - depth01) / maxf(foot_width, 0.001), 0.0, 1.0)
 	foot *= 1.0 - (height01 * 0.52)
 	var cap: float = smoothstep(float(type_config.get("cap_threshold", 0.74)), 0.98, height01)
-	cap *= 0.74 + (float(context.get("terrace_plateau", 0.0)) * 0.26)
+	cap *= 0.72 + (float(context.get("terrace_plateau", 0.0)) * 0.30)
 	cap *= 1.0 - (cliff * 0.42)
 	var ledge: float = float(context.get("terrace_plateau", 0.0)) * (1.0 - cap) * (0.55 + (ridge * 0.22))
 	ledge *= 1.0 - (cliff * 0.38)
+
+	match summit_profile:
+		"plateau":
+			cap = maxf(cap, smoothstep(float(type_config.get("cap_threshold", 0.74)) - 0.08, 0.94, height01) * 0.92)
+			ledge *= 1.14
+			cliff *= 0.92
+		"broken_top":
+			cap *= 0.90 + (float(context.get("terrace_plateau", 0.0)) * 0.12)
+			ledge *= 1.18
+			cliff = clampf(cliff + 0.06, 0.0, 1.0)
+		_:
+			cap *= 0.84 + (ridge * 0.18)
+			cliff = clampf(cliff + (ridge * 0.05), 0.0, 1.0)
+
+	match rock_role:
+		MapTypes.RockRole.FOOT:
+			foot = 1.0
+			cliff *= 0.16
+			cap = 0.0
+			ledge *= 0.18
+		MapTypes.RockRole.TALUS:
+			foot = maxf(foot, 0.76)
+			cliff *= 0.42
+			cap *= 0.18
+			ledge *= 0.42
+		MapTypes.RockRole.SHELF:
+			ledge = maxf(ledge, 0.82)
+			cliff = maxf(cliff * 0.68, 0.26)
+			cap = maxf(cap * 0.42, 0.12)
+			foot *= 0.42
+		MapTypes.RockRole.WALL:
+			cliff = maxf(cliff, 0.82)
+			foot *= 0.26
+			cap *= 0.14
+			ledge *= 0.36
+		MapTypes.RockRole.SUMMIT:
+			cap = maxf(cap, 0.92)
+			cliff *= 0.54
+			ledge = maxf(ledge, 0.34)
+			foot *= 0.16
 
 	match profile_type:
 		"ridge":
@@ -682,7 +891,7 @@ func _add_cliff_face(
 	var avg_cliff: float = (float(top_a_sample.get("cliff", 0.0)) + float(top_b_sample.get("cliff", 0.0))) * 0.5
 	var avg_ledge: float = (float(top_a_sample.get("ledge", 0.0)) + float(top_b_sample.get("ledge", 0.0))) * 0.5
 	var avg_foot: float = (float(top_a_sample.get("foot", 0.0)) + float(top_b_sample.get("foot", 0.0))) * 0.5
-	if avg_height < 0.34 or avg_cliff < 0.18:
+	if avg_height < 0.42 or avg_cliff < 0.18:
 		_add_quad(
 			surface,
 			top_a,
@@ -696,17 +905,17 @@ func _add_cliff_face(
 		)
 		return
 
-	var face_break_y: float = maxf(0.18, avg_height * (0.42 + (avg_ledge * 0.12)))
-	var shelf_y: float = maxf(0.10, face_break_y - (0.18 + (avg_foot * 0.12)))
-	var face_push: float = 0.10 + (avg_cliff * 0.18)
-	var shelf_push: float = face_push + (0.06 + (avg_ledge * 0.14))
+	var face_break_y: float = maxf(0.24, avg_height * (0.48 + (avg_ledge * 0.14)))
+	var shelf_y: float = maxf(0.12, face_break_y - (0.22 + (avg_foot * 0.14)))
+	var face_push: float = 0.12 + (avg_cliff * 0.22)
+	var shelf_push: float = face_push + (0.10 + (avg_ledge * 0.18))
 	var mid_a := Vector3(top_a.x + (outward.x * face_push), face_break_y, top_a.z + (outward.z * face_push))
 	var mid_b := Vector3(top_b.x + (outward.x * face_push), face_break_y, top_b.z + (outward.z * face_push))
 	var mid_a_sample := _face_sample(top_a_sample, avg_cliff + 0.10, avg_foot + 0.04)
 	var mid_b_sample := _face_sample(top_b_sample, avg_cliff + 0.10, avg_foot + 0.04)
 
 	_add_quad(surface, top_a, _vertex_color(mid_a_sample), top_b, _vertex_color(mid_b_sample), mid_b, _vertex_color(mid_b_sample), mid_a, _vertex_color(mid_a_sample))
-	if avg_ledge > 0.22:
+	if avg_ledge > 0.16:
 		var shelf_a := Vector3(mid_a.x + (outward.x * shelf_push), shelf_y, mid_a.z + (outward.z * shelf_push))
 		var shelf_b := Vector3(mid_b.x + (outward.x * shelf_push), shelf_y, mid_b.z + (outward.z * shelf_push))
 		var shelf_a_sample := _face_sample(top_a_sample, avg_cliff + 0.04, avg_foot + 0.10, 0.74)

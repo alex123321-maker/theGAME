@@ -87,7 +87,7 @@ func _zone_density(tile, map_data: MapData) -> float:
 	if tile.terrain_type == MapTypes.TerrainType.FOREST:
 		return 0.20 if tile.debug_tags.has("forest_fringe") else 0.13
 	if tile.terrain_type == MapTypes.TerrainType.ROCK:
-		return 0.16 if tile.debug_tags.has("rock_edge") else 0.10
+		return 0.16 if tile.rock_role == MapTypes.RockRole.FOOT or tile.rock_role == MapTypes.RockRole.TALUS or tile.debug_tags.has("rock_edge") else 0.10
 	if _is_near_road(tile, map_data):
 		return 0.06
 	if tile.base_terrain_type == MapTypes.TerrainType.CLEARING:

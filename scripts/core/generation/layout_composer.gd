@@ -320,6 +320,7 @@ func _realize_motif(source: Dictionary, rng: RandomNumberGenerator, region_id: i
 			_apply_thin_ridge_profile(motif, rng)
 		elif String(motif.get("ridge_profile", "")) == "grand":
 			_apply_grand_ridge_profile(motif, rng)
+		_apply_rock_relief_profile(motif, rng)
 	if int(motif.get("kind", MapTypes.BlockerType.NONE)) == MapTypes.BlockerType.FOREST and String(motif.get("shape", "metaball")) == "metaball":
 		var allow_disconnected: bool = bool(motif.get("allow_disconnected_clusters", motif_role == "satellite"))
 		motif["allow_disconnected_clusters"] = allow_disconnected
@@ -349,6 +350,14 @@ func _apply_thin_ridge_profile(motif: Dictionary, rng: RandomNumberGenerator) ->
 		motif["edge_band"] = 0 if rng.randf() < 0.45 else 1
 	elif int(motif.get("edge_band", 1)) > 0 and rng.randf() < 0.35:
 		motif["edge_band"] = 0
+	motif["rock_mass_profile"] = "ridge"
+	motif["terrace_count_min"] = 3
+	motif["terrace_count_max"] = 3
+	motif["spur_count_min"] = 1
+	motif["spur_count_max"] = 2
+	motif["plateau_pad_chance"] = 0.08
+	motif["broken_top_chance"] = 0.14
+	motif["plateau_chance"] = 0.02
 
 func _apply_grand_ridge_profile(motif: Dictionary, rng: RandomNumberGenerator) -> void:
 	motif["length_min"] = maxf(float(motif.get("length_min", 34.0)), 34.0)
@@ -362,6 +371,36 @@ func _apply_grand_ridge_profile(motif: Dictionary, rng: RandomNumberGenerator) -
 	motif["edge_band"] = maxi(1, int(motif.get("edge_band", 1)))
 	if rng.randf() < 0.35:
 		motif["size_bias"] = float(motif.get("size_bias", 1.0)) * rng.randf_range(1.05, 1.18)
+	motif["rock_mass_profile"] = "massif"
+	motif["terrace_count_min"] = 3
+	motif["terrace_count_max"] = 4
+	motif["spur_count_min"] = 2
+	motif["spur_count_max"] = 3
+	motif["plateau_pad_chance"] = 0.42
+	motif["broken_top_chance"] = 0.34
+	motif["plateau_chance"] = 0.30
+
+func _apply_rock_relief_profile(motif: Dictionary, rng: RandomNumberGenerator) -> void:
+	var terrace_min: int = int(motif.get("terrace_count_min", 3))
+	var terrace_max: int = max(terrace_min, int(motif.get("terrace_count_max", terrace_min)))
+	motif["terrace_count"] = rng.randi_range(terrace_min, terrace_max)
+	var spur_min: int = int(motif.get("spur_count_min", 1))
+	var spur_max: int = max(spur_min, int(motif.get("spur_count_max", spur_min)))
+	motif["spur_count"] = rng.randi_range(spur_min, spur_max)
+
+	var mass_profile: String = String(motif.get("rock_mass_profile", "massif"))
+	var summit_profile: int = MapTypes.RockSummitProfile.PEAK
+	if mass_profile == "ridge":
+		summit_profile = MapTypes.RockSummitProfile.BROKEN_TOP if rng.randf() < float(motif.get("broken_top_chance", 0.14)) else MapTypes.RockSummitProfile.PEAK
+	else:
+		var roll: float = rng.randf()
+		var plateau_chance: float = float(motif.get("plateau_chance", 0.24))
+		var broken_top_chance: float = float(motif.get("broken_top_chance", 0.30))
+		if roll < plateau_chance:
+			summit_profile = MapTypes.RockSummitProfile.PLATEAU
+		elif roll < plateau_chance + broken_top_chance:
+			summit_profile = MapTypes.RockSummitProfile.BROKEN_TOP
+	motif["rock_summit_profile"] = summit_profile
 
 func _apply_canopy_forest_profile(motif: Dictionary, rng: RandomNumberGenerator) -> void:
 	motif["blob_count_min"] = maxi(int(motif.get("blob_count_min", 4)), 4)

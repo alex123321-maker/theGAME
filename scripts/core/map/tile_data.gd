@@ -8,6 +8,8 @@ var height_class: int = MapTypes.HeightClass.MID
 var region_id: int = 0
 var region_type: int = MapTypes.RegionType.NONE
 var blocker_type: int = MapTypes.BlockerType.NONE
+var rock_role: int = MapTypes.RockRole.NONE
+var rock_summit_profile: int = MapTypes.RockSummitProfile.NONE
 var road_width_class: int = MapTypes.RoadWidthClass.NONE
 var road_width_cells: int = 0
 var transition_type: int = MapTypes.TransitionType.NONE
@@ -39,6 +41,8 @@ func to_dict() -> Dictionary:
 		"region_id": region_id,
 		"region_type": region_type,
 		"blocker_type": blocker_type,
+		"rock_role": rock_role,
+		"rock_summit_profile": rock_summit_profile,
 		"road_width_class": road_width_class,
 		"road_width_cells": road_width_cells,
 		"transition_type": transition_type,
@@ -69,6 +73,8 @@ static func from_dict(source: Dictionary):
 	tile.region_id = int(source.get("region_id", 0))
 	tile.region_type = int(source.get("region_type", MapTypes.RegionType.NONE))
 	tile.blocker_type = int(source.get("blocker_type", MapTypes.BlockerType.NONE))
+	tile.rock_role = int(source.get("rock_role", MapTypes.RockRole.NONE))
+	tile.rock_summit_profile = int(source.get("rock_summit_profile", MapTypes.RockSummitProfile.NONE))
 	tile.road_width_class = int(source.get("road_width_class", MapTypes.RoadWidthClass.NONE))
 	tile.road_width_cells = int(source.get("road_width_cells", 0))
 	tile.transition_type = int(source.get("transition_type", MapTypes.TransitionType.NONE))

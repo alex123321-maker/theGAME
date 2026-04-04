@@ -10,9 +10,9 @@ uniform vec4 talus_color : source_color = vec4(0.71, 0.72, 0.75, 1.0);
 uniform vec4 crack_color : source_color = vec4(0.45, 0.47, 0.51, 1.0);
 uniform vec3 light_direction = vec3(-0.58, 0.78, -0.22);
 uniform float large_noise_scale : hint_range(0.01, 1.0) = 0.10;
-uniform float large_noise_strength : hint_range(0.0, 0.2) = 0.04;
+uniform float large_noise_strength : hint_range(0.0, 0.2) = 0.02;
 uniform float crack_scale : hint_range(0.05, 2.0) = 0.28;
-uniform float crack_strength : hint_range(0.0, 1.0) = 0.30;
+uniform float crack_strength : hint_range(0.0, 1.0) = 0.16;
 
 varying vec3 local_position;
 varying vec4 vertex_mask;
@@ -49,27 +49,27 @@ void fragment() {
 	float ledge_mask = clamp((1.0 - cap_mask) * (1.0 - cliff_mask * 0.55) * (0.35 + ridge_mask * 0.45), 0.0, 1.0);
 
 	float lambert = clamp(dot(normal_dir, light_dir), 0.0, 1.0);
-	float shade_bias = (cap_mask * 0.14) - (cliff_mask * 0.18) - (slope * 0.08);
+	float shade_bias = (cap_mask * 0.20) + (ridge_mask * 0.05) - (cliff_mask * 0.26) - (slope * 0.12);
 	float stepped = texture(light_ramp, vec2(clamp(lambert + shade_bias, 0.0, 1.0), 0.5)).r;
 
-	float broad_noise = (noise2d(local_position.xz * large_noise_scale) - 0.5) * large_noise_strength * (0.25 + cliff_mask * 0.75 + foot_mask * 0.30);
+	float broad_noise = (noise2d(local_position.xz * large_noise_scale) - 0.5) * large_noise_strength * (cliff_mask * 0.85 + foot_mask * 0.25);
 	float crack_noise = noise2d((local_position.xz * crack_scale) + vec2(17.0, 9.0));
-	float crack_mask = smoothstep(0.70, 0.95, crack_noise) * crack_strength * (0.25 + cliff_mask * 0.75);
+	float crack_mask = smoothstep(0.74, 0.95, crack_noise) * crack_strength * (0.18 + cliff_mask * 0.82);
 
-	vec3 cap_tone = mix(base_color.rgb, ridge_color.rgb, cap_mask * (0.72 + ridge_mask * 0.18));
-	vec3 ledge_tone = mix(base_color.rgb, ridge_color.rgb, ledge_mask * 0.18);
-	vec3 cliff_tone = mix(base_color.rgb, shadow_color.rgb, 0.52 + slope * 0.18);
+	vec3 cap_tone = mix(base_color.rgb, ridge_color.rgb, cap_mask * (0.84 + ridge_mask * 0.22));
+	vec3 ledge_tone = mix(base_color.rgb, ridge_color.rgb, ledge_mask * 0.14);
+	vec3 cliff_tone = mix(base_color.rgb, shadow_color.rgb, 0.64 + slope * 0.22 + cliff_mask * 0.10);
 	vec3 foot_tone = mix(base_color.rgb, talus_color.rgb, foot_mask * 0.88);
 	vec3 color_mix = mix(ledge_tone, cap_tone, cap_mask);
-	color_mix = mix(color_mix, foot_tone, foot_mask * 0.78);
-	color_mix = mix(color_mix, cliff_tone, clamp(cliff_mask + slope * 0.22, 0.0, 1.0));
+	color_mix = mix(color_mix, foot_tone, foot_mask * 0.74);
+	color_mix = mix(color_mix, cliff_tone, clamp(cliff_mask + slope * 0.28, 0.0, 1.0));
 	color_mix += vec3(broad_noise);
 	color_mix = mix(color_mix, crack_color.rgb, crack_mask);
 
-	float face_shadow = clamp((slope * 0.62) + (cliff_mask * 0.40), 0.0, 1.0);
-	vec3 lit = mix(mix(shadow_color.rgb, color_mix, 0.56), color_mix, stepped);
-	lit = mix(lit, shadow_color.rgb, face_shadow * (1.0 - stepped) * 0.45);
-	lit = mix(lit, ridge_color.rgb, cap_mask * 0.22 + ridge_mask * cap_mask * 0.20);
+	float face_shadow = clamp((slope * 0.72) + (cliff_mask * 0.56) - (cap_mask * 0.18), 0.0, 1.0);
+	vec3 lit = mix(shadow_color.rgb * 0.94, color_mix, stepped);
+	lit = mix(lit, shadow_color.rgb, face_shadow * (1.0 - stepped) * 0.52);
+	lit = mix(lit, ridge_color.rgb, cap_mask * 0.28 + ridge_mask * cap_mask * 0.22);
 	lit = mix(lit, talus_color.rgb, foot_mask * 0.14);
 
 	ALBEDO = clamp(lit, vec3(0.0), vec3(1.0));

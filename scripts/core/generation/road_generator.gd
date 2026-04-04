@@ -162,7 +162,7 @@ func _road_step_cost(tile, allow_soft_break: bool) -> float:
 		return 2.6
 	if tile.base_terrain_type == MapTypes.TerrainType.ROCK:
 		return 5.8
-	if tile.debug_tags.has("rock_edge"):
+	if tile.rock_role == MapTypes.RockRole.FOOT or tile.rock_role == MapTypes.RockRole.TALUS or tile.debug_tags.has("rock_edge"):
 		return maxf(tile.walk_cost, 4.2)
 	if tile.region_type == MapTypes.RegionType.APPROACH_CORRIDOR:
 		return 0.96

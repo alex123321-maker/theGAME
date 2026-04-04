@@ -14,6 +14,8 @@ func initialize_ground(map_data: MapData, composition: Dictionary) -> void:
 		tile.region_id = 1
 		tile.region_type = MapTypes.RegionType.OPEN_GROUND
 		tile.blocker_type = MapTypes.BlockerType.NONE
+		tile.rock_role = MapTypes.RockRole.NONE
+		tile.rock_summit_profile = MapTypes.RockSummitProfile.NONE
 		tile.road_width_class = MapTypes.RoadWidthClass.NONE
 		tile.transition_type = MapTypes.TransitionType.NONE
 		tile.walk_cost = 1.0

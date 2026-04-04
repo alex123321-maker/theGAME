@@ -241,6 +241,9 @@ func _build_filler_shape(
 	return points
 
 func _stamp_filler_tiles(map_data: MapData, points: Array[Vector2i], region_id: int, style: String) -> void:
+	var point_lookup := {}
+	for style_point in points:
+		point_lookup[style_point] = true
 	for point in points:
 		var tile = map_data.get_tile(point.x, point.y)
 		if tile == null:
@@ -256,18 +259,25 @@ func _stamp_filler_tiles(map_data: MapData, points: Array[Vector2i], region_id: 
 				tile.base_terrain_type = MapTypes.TerrainType.FOREST
 				tile.terrain_type = MapTypes.TerrainType.FOREST
 				tile.blocker_type = MapTypes.BlockerType.FOREST
+				tile.rock_role = MapTypes.RockRole.NONE
+				tile.rock_summit_profile = MapTypes.RockSummitProfile.NONE
 				tile.resource_tag = MapTypes.ResourceTag.WOOD
 				tile.walk_cost = 1.95
 			"rock_scree":
 				tile.base_terrain_type = MapTypes.TerrainType.ROCK
 				tile.terrain_type = MapTypes.TerrainType.ROCK
 				tile.blocker_type = MapTypes.BlockerType.ROCK
+				tile.rock_role = MapTypes.RockRole.TALUS if _touches_non_style_neighbor(map_data, point, point_lookup) else MapTypes.RockRole.FOOT
+				tile.rock_summit_profile = MapTypes.RockSummitProfile.NONE
+				tile.height_class = MapTypes.HeightClass.LOW if tile.rock_role == MapTypes.RockRole.FOOT else MapTypes.HeightClass.MID
 				tile.resource_tag = MapTypes.ResourceTag.STONE
 				tile.walk_cost = 3.30
 			_:
 				tile.base_terrain_type = MapTypes.TerrainType.GROUND
 				tile.terrain_type = MapTypes.TerrainType.GROUND
 				tile.blocker_type = MapTypes.BlockerType.NONE
+				tile.rock_role = MapTypes.RockRole.NONE
+				tile.rock_summit_profile = MapTypes.RockSummitProfile.NONE
 				tile.resource_tag = MapTypes.ResourceTag.NONE
 				tile.walk_cost = 1.40
 		if not tile.debug_tags.has("void_filler"):
@@ -334,6 +344,14 @@ func _near_selected_peak(point: Vector2i, selected: Array[Dictionary], min_dista
 	for item in selected:
 		var other: Vector2i = item.get("point", Vector2i.ZERO)
 		if point.distance_to(other) < float(min_distance):
+			return true
+	return false
+
+func _touches_non_style_neighbor(map_data: MapData, point: Vector2i, lookup: Dictionary) -> bool:
+	for neighbor in [point + Vector2i.LEFT, point + Vector2i.RIGHT, point + Vector2i.UP, point + Vector2i.DOWN]:
+		if not map_data.is_in_bounds(neighbor.x, neighbor.y):
+			return true
+		if not lookup.has(neighbor):
 			return true
 	return false
 
