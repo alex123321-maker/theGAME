@@ -19,6 +19,8 @@ var _test_runner := MapTestRunnerClass.new()
 var _map_data: MapData
 var _camera_initialized: bool = false
 var _last_generation_config: Dictionary = {}
+var _is_generating: bool = false
+var _pending_generation_reason: String = ""
 
 func _ready() -> void:
 	_connect_debug_bus()
@@ -189,6 +191,13 @@ func _on_reference_seed_changed(index: int, seed: int) -> void:
 	runtime_panel.set_reference_seed(index, total, seed)
 
 func _generate_current_map(reason: String) -> void:
+	if _is_generating:
+		_pending_generation_reason = reason
+		return
+	_is_generating = true
+	runtime_panel.set_status_message("Generating map (%s)..." % reason)
+	await get_tree().process_frame
+
 	_last_generation_config = _build_generation_config()
 	_map_data = _generator.generate(run_context.current_seed, _last_generation_config)
 
@@ -216,6 +225,12 @@ func _generate_current_map(reason: String) -> void:
 			int(_map_data.generation_summary.get("attempt_count", 1)),
 		]
 	)
+
+	_is_generating = false
+	if not _pending_generation_reason.is_empty():
+		var queued_reason: String = _pending_generation_reason
+		_pending_generation_reason = ""
+		_generate_current_map(queued_reason)
 
 func _update_runtime_panel() -> void:
 	if _map_data == null:

@@ -57,6 +57,7 @@ func _generate_attempt(seed: int, generation_config, attempt_index: int) -> MapD
 	_generate_water_body(map_data, rng, generation_config, composition)
 	_generate_void_fillers(map_data, rng, generation_config, composition)
 	_generate_roads(map_data, rng, generation_config, composition)
+	_region_generator.sync_approach_regions_to_roads(map_data, composition)
 	_resolve_surface_transitions(map_data)
 	_build_buildable_mask(map_data)
 	map_data.rebuild_layers_from_tiles()

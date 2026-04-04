@@ -5,6 +5,15 @@ const WorldGridProjection3DClass = preload("res://scripts/presentation/world_gri
 const GenerationUtilsClass = preload("res://scripts/core/generation/generation_utils.gd")
 
 const MIN_VISIBLE_HEIGHT: float = 0.04
+const PEAK_HEIGHT_SCALE: float = 1.22
+const CLIFF_VERTICAL_SEGMENTS: int = 8
+const CLIFF_HORIZONTAL_SEGMENTS: int = 6
+const CLIFF_LEDGE_DEPTH: float = 1.15
+const CLIFF_BREAKUP_STRENGTH: float = 0.85
+const SHORE_TOP_FLARE_DEPTH: float = 0.95
+const MIN_GEOMETRY_PUSH_DELTA: float = 0.03
+const MIN_TRIANGLE_AREA_SQ: float = 0.0000005
+const TOP_BLOCK_PUSH_MULTIPLIER: float = 0.30
 
 func build_profiles(map_data: MapData) -> Array[Dictionary]:
 	var raw_regions: Dictionary = {}
@@ -77,7 +86,7 @@ func build_profiles(map_data: MapData) -> Array[Dictionary]:
 		var profile: Dictionary = raw_regions[region_key]
 		if profile.get("cells", []).size() < 2:
 			continue
-		_finalize_profile(profile)
+		_finalize_profile(profile, map_data)
 		profiles.append(profile)
 
 	profiles.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -89,6 +98,7 @@ func build_mesh(profile: Dictionary):
 	var cells: Array = profile.get("cells", [])
 	var cell_set: Dictionary = profile.get("cell_set", {})
 	var corner_samples: Dictionary = profile.get("corner_samples", {})
+	var shore_sides: Dictionary = profile.get("shore_sides", {})
 	if cells.is_empty() or corner_samples.is_empty():
 		return null
 
@@ -114,16 +124,13 @@ func build_mesh(profile: Dictionary):
 		var sw: Vector3 = _corner_world(sw_corner, sw_sample)
 
 		if maxf(maxf(nw.y, ne.y), maxf(se.y, sw.y)) > MIN_VISIBLE_HEIGHT:
-			_add_quad(
+			_add_blocky_top_face(
 				surface,
-				nw,
-				_vertex_color(nw_sample),
-				sw,
-				_vertex_color(sw_sample),
-				se,
-				_vertex_color(se_sample),
-				ne,
-				_vertex_color(ne_sample)
+				nw, nw_sample,
+				sw, sw_sample,
+				se, se_sample,
+				ne, ne_sample,
+				float(cell.x + cell.y * 12.3)
 			)
 			has_geometry = true
 
@@ -133,16 +140,56 @@ func build_mesh(profile: Dictionary):
 		var ground_sw: Vector3 = _ground_world(sw_corner, sw_sample)
 
 		if not cell_set.has(Vector2i(cell.x, cell.y - 1)) and maxf(nw.y, ne.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(surface, nw, nw_sample, ne, ne_sample, ground_nw, ground_ne, Vector3(0.0, 0.0, -1.0))
+			_add_cliff_face(
+				surface,
+				nw,
+				nw_sample,
+				ne,
+				ne_sample,
+				ground_nw,
+				ground_ne,
+				Vector3(0.0, 0.0, -1.0),
+				bool(shore_sides.get(_cell_side_key(cell, "north"), false))
+			)
 			has_geometry = true
 		if not cell_set.has(Vector2i(cell.x + 1, cell.y)) and maxf(ne.y, se.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(surface, ne, ne_sample, se, se_sample, ground_ne, ground_se, Vector3(1.0, 0.0, 0.0))
+			_add_cliff_face(
+				surface,
+				ne,
+				ne_sample,
+				se,
+				se_sample,
+				ground_ne,
+				ground_se,
+				Vector3(1.0, 0.0, 0.0),
+				bool(shore_sides.get(_cell_side_key(cell, "east"), false))
+			)
 			has_geometry = true
 		if not cell_set.has(Vector2i(cell.x, cell.y + 1)) and maxf(se.y, sw.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(surface, se, se_sample, sw, sw_sample, ground_se, ground_sw, Vector3(0.0, 0.0, 1.0))
+			_add_cliff_face(
+				surface,
+				se,
+				se_sample,
+				sw,
+				sw_sample,
+				ground_se,
+				ground_sw,
+				Vector3(0.0, 0.0, 1.0),
+				bool(shore_sides.get(_cell_side_key(cell, "south"), false))
+			)
 			has_geometry = true
 		if not cell_set.has(Vector2i(cell.x - 1, cell.y)) and maxf(sw.y, nw.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(surface, sw, sw_sample, nw, nw_sample, ground_sw, ground_nw, Vector3(-1.0, 0.0, 0.0))
+			_add_cliff_face(
+				surface,
+				sw,
+				sw_sample,
+				nw,
+				nw_sample,
+				ground_sw,
+				ground_nw,
+				Vector3(-1.0, 0.0, 0.0),
+				bool(shore_sides.get(_cell_side_key(cell, "west"), false))
+			)
 			has_geometry = true
 
 	if not has_geometry:
@@ -160,7 +207,7 @@ func _is_mountain_tile(tile, rock_region_labels: Dictionary) -> bool:
 		or tile.debug_tags.has("rock_core") \
 		or tile.debug_tags.has("rock_edge")
 
-func _finalize_profile(profile: Dictionary) -> void:
+func _finalize_profile(profile: Dictionary, map_data: MapData) -> void:
 	var cells: Array = profile.get("cells", [])
 	var cell_set: Dictionary = profile.get("cell_set", {})
 	var center := Vector2.ZERO
@@ -258,6 +305,7 @@ func _finalize_profile(profile: Dictionary) -> void:
 	profile["peak_height"] = peak_height
 	profile["height_map"] = height_map
 	profile["zone_map"] = zone_map
+	profile["shore_sides"] = _build_shore_side_map(cells, cell_set, map_data)
 	profile["corner_samples"] = _build_corner_samples(profile)
 
 func _principal_axis(cells: Array, center: Vector2) -> Dictionary:
@@ -495,11 +543,20 @@ func _peak_height(max_distance: int, axis_data: Dictionary, profile_type: String
 	var major_span: float = float(axis_data.get("major_span", 1.0))
 	var minor_span: float = float(axis_data.get("minor_span", 1.0))
 	var base_height: float = 1.10 + (float(max_distance) * 0.98) + (major_span * 0.12) + (minor_span * 0.09)
+	var thickness_boost: float = 1.0
+	if max_distance <= 1:
+		thickness_boost = 2.40
+	elif max_distance == 2:
+		thickness_boost = 1.85
+	elif max_distance == 3:
+		thickness_boost = 1.35
+	base_height *= thickness_boost
+
 	match profile_type:
 		"ridge":
-			base_height *= 0.98
+			base_height *= 1.12
 		"broken_cliff":
-			base_height *= 0.92
+			base_height *= 1.18
 		_:
 			base_height *= 1.18
 
@@ -509,7 +566,9 @@ func _peak_height(max_distance: int, axis_data: Dictionary, profile_type: String
 		"broken_top":
 			base_height *= 1.04
 
-	return clampf(base_height, 1.4, 8.8)
+	base_height *= PEAK_HEIGHT_SCALE
+
+	return clampf(base_height, 2.8, 14.0)
 
 func _build_cell_context(
 	cell: Vector2i,
@@ -802,12 +861,19 @@ func _build_corner_samples(profile: Dictionary) -> Dictionary:
 		var corner: Vector2i = raw_corner
 		var accumulator: Dictionary = corner_accumulator[corner]
 		var count: float = maxf(1.0, float(accumulator.get("count", 1)))
+		var sample_height: float = float(accumulator.get("height_sum", 0.0)) / count
 		var offset := Vector2.ZERO
 		if corner_offset_accumulator.has(corner):
 			var entry: Dictionary = corner_offset_accumulator[corner]
 			offset = Vector2(entry.get("offset", Vector2.ZERO)) / maxf(1.0, float(entry.get("count", 1)))
+			if offset.length_squared() > 0.000001:
+				var max_corner_offset: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * 0.14
+				var high_alt_dampen: float = lerpf(1.0, 0.58, smoothstep(5.0, 10.0, sample_height))
+				var allowed_offset: float = max_corner_offset * high_alt_dampen
+				if offset.length() > allowed_offset:
+					offset = offset.normalized() * allowed_offset
 		samples[corner] = {
-			"height": float(accumulator.get("height_sum", 0.0)) / count,
+			"height": sample_height,
 			"cap": float(accumulator.get("cap_sum", 0.0)) / count,
 			"cliff": float(accumulator.get("cliff_sum", 0.0)) / count,
 			"foot": float(accumulator.get("foot_sum", 0.0)) / count,
@@ -877,6 +943,190 @@ func _face_sample(sample: Dictionary, cliff_boost: float, foot_boost: float, rid
 		"offset": sample.get("offset", Vector2.ZERO),
 	}
 
+func _sample_lerp(sample_a: Dictionary, sample_b: Dictionary, t: float) -> Dictionary:
+	return {
+		"height": lerpf(float(sample_a.get("height", 0.0)), float(sample_b.get("height", 0.0)), t),
+		"cap": lerpf(float(sample_a.get("cap", 0.0)), float(sample_b.get("cap", 0.0)), t),
+		"cliff": lerpf(float(sample_a.get("cliff", 0.0)), float(sample_b.get("cliff", 0.0)), t),
+		"foot": lerpf(float(sample_a.get("foot", 0.0)), float(sample_b.get("foot", 0.0)), t),
+		"ridge": lerpf(float(sample_a.get("ridge", 0.0)), float(sample_b.get("ridge", 0.0)), t),
+		"ledge": lerpf(float(sample_a.get("ledge", 0.0)), float(sample_b.get("ledge", 0.0)), t),
+		"offset": Vector2.ZERO,
+	}
+
+func _cliff_face_block_data(
+	top_a: Vector3,
+	top_a_sample: Dictionary,
+	top_b: Vector3,
+	top_b_sample: Dictionary,
+	base_a: Vector3,
+	base_b: Vector3,
+	avg_cliff: float,
+	avg_foot: float,
+	avg_ledge: float,
+	avg_ridge: float,
+	u: float,
+	v: float,
+	phase: float,
+	is_shore: bool
+) -> Dictionary:
+	var top_pos: Vector3 = top_a.lerp(top_b, u)
+	var base_pos: Vector3 = base_a.lerp(base_b, u)
+	var vertical_drop: float = maxf(0.001, top_pos.y - base_pos.y)
+	var height_scale: float = clampf(vertical_drop / 3.8, 0.24, 1.0)
+	var edge_fade: float = pow(maxf(sin(u * PI), 0.0), 1.10)
+	var seam_lock_top: float = smoothstep(0.04, 0.18, v)
+	var seam_lock_bottom: float = 1.0 - smoothstep(0.84, 0.98, v)
+	var seam_lock: float = seam_lock_top * seam_lock_bottom
+	
+	var ledge_steps: float = 4.0 + floor((avg_cliff * 4.0) + (avg_ledge * 3.0))
+	var step_phase: float = (v * ledge_steps) + (phase * 0.3)
+	var blocky_v: float = floor(step_phase) / ledge_steps
+	var step_local: float = step_phase - floor(step_phase)
+	var step_mask: float = smoothstep(0.0, 0.15, step_local) * (1.0 - smoothstep(0.75, 1.0, step_local))
+	
+	var vertical_bands: float = 3.0 + (avg_cliff * 3.0)
+	var blocky_u: float = floor(u * vertical_bands + phase * 2.0)
+	var ledge_wave: float = sin(blocky_v * 13.0 + blocky_u * 7.0 + phase * TAU) * 0.5 + 0.5
+	var ledge_mask: float = maxf(
+		pow(ledge_wave, 1.5),
+		step_mask * (0.6 + (avg_ledge * 0.4))
+	)
+	var breakup_wave: float = sin(blocky_u * 4.0 + blocky_v * 5.0 + phase * TAU) * 0.5 + 0.5
+	
+	var ledge_push: float = CLIFF_LEDGE_DEPTH
+	ledge_push *= 0.5 + (avg_cliff * 0.5)
+	ledge_push *= 0.6 + (avg_ledge * 0.4)
+	ledge_push *= ledge_mask * edge_fade
+	ledge_push *= 0.6 + (breakup_wave * CLIFF_BREAKUP_STRENGTH)
+	
+	var shore_flare: float = 0.0
+	if is_shore:
+		var upper_band: float = 1.0 - smoothstep(0.05, 0.45, v)
+		var overhang: float = smoothstep(0.0, 0.1, v)
+		var top_blockiness: float = 0.7 + (sin(blocky_u * 3.0 + phase * 4.0) * 0.5 + 0.5) * 0.3
+		shore_flare = SHORE_TOP_FLARE_DEPTH
+		shore_flare *= upper_band * overhang * edge_fade * top_blockiness
+		shore_flare *= clampf((avg_cliff * 0.8) + 0.4, 0.4, 1.0)
+	
+	var max_push: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * (0.36 if is_shore else 0.24)
+	var push_scale: float = 0.62 if is_shore else 0.52
+	var push_amount: float = clampf((ledge_push + shore_flare) * height_scale * seam_lock * push_scale, 0.0, max_push)
+	
+	var side_sample: Dictionary = _sample_lerp(top_a_sample, top_b_sample, u)
+	var face_sample: Dictionary = _face_sample(side_sample, maxf(avg_cliff, 0.26), avg_foot, 0.86 + (avg_ridge * 0.10))
+	var ground_sample: Dictionary = _ground_sample(side_sample)
+	var ground_mix: float = smoothstep(0.46, 1.0, v)
+	var color: Color = _vertex_color(face_sample).lerp(_vertex_color(ground_sample), ground_mix)
+	if is_shore:
+		color.g = clampf(color.g + ((1.0 - v) * 0.08), 0.0, 1.0)
+		color.b = clampf(color.b + (v * 0.06), 0.0, 1.0)
+	
+	return {
+		"push": push_amount,
+		"color": color,
+	}
+
+func _add_blocky_top_face(
+	surface: SurfaceTool,
+	nw: Vector3, nw_sample: Dictionary,
+	sw: Vector3, sw_sample: Dictionary,
+	se: Vector3, se_sample: Dictionary,
+	ne: Vector3, ne_sample: Dictionary,
+	phase: float
+) -> void:
+	var segments: int = CLIFF_HORIZONTAL_SEGMENTS
+	var pushes: Array = []
+	var colors: Array = []
+	
+	for y in range(segments):
+		var row_pushes: Array = []
+		var row_colors: Array = []
+		for x in range(segments):
+			var u: float = (float(x) + 0.5) / float(segments)
+			var v: float = (float(y) + 0.5) / float(segments)
+			
+			var edge_fade_u: float = pow(maxf(sin(u * PI), 0.0), 0.6)
+			var edge_fade_v: float = pow(maxf(sin(v * PI), 0.0), 0.6)
+			var seam_lock: float = edge_fade_u * edge_fade_v
+			
+			var blocky_u: float = floor(u * 5.0 + phase * 2.0)
+			var blocky_v: float = floor(v * 4.0 + phase * 1.5)
+			var bump: float = sin(blocky_u * 13.0 + blocky_v * 7.0 + phase * TAU) * 0.5 + 0.5
+			bump = floor(bump * 3.0) / 3.0
+			
+			var push: float = bump * seam_lock * TOP_BLOCK_PUSH_MULTIPLIER * CLIFF_LEDGE_DEPTH
+			row_pushes.append(push)
+			
+			var c_top = _vertex_color(nw_sample).lerp(_vertex_color(ne_sample), u)
+			var c_bot = _vertex_color(sw_sample).lerp(_vertex_color(se_sample), u)
+			row_colors.append(c_top.lerp(c_bot, v))
+			
+		pushes.append(row_pushes)
+		colors.append(row_colors)
+
+	for y in range(segments):
+		var v0: float = float(y) / float(segments)
+		var v1: float = float(y + 1) / float(segments)
+		for x in range(segments):
+			var u0: float = float(x) / float(segments)
+			var u1: float = float(x + 1) / float(segments)
+			
+			var push: float = pushes[y][x]
+			var color: Color = colors[y][x]
+			
+			var tp_u0: Vector3 = nw.lerp(ne, u0)
+			var tp_u1: Vector3 = nw.lerp(ne, u1)
+			var bp_u0: Vector3 = sw.lerp(se, u0)
+			var bp_u1: Vector3 = sw.lerp(se, u1)
+			
+			var p_a: Vector3 = tp_u0.lerp(bp_u0, v0) + Vector3.UP * push
+			var p_b: Vector3 = tp_u0.lerp(bp_u0, v1) + Vector3.UP * push
+			var p_c: Vector3 = tp_u1.lerp(bp_u1, v1) + Vector3.UP * push
+			var p_d: Vector3 = tp_u1.lerp(bp_u1, v0) + Vector3.UP * push
+			
+			_add_quad(surface, p_a, color, p_b, color, p_c, color, p_d, color)
+			
+			if x > 0 and (push - float(pushes[y][x-1])) > MIN_GEOMETRY_PUSH_DELTA:
+				var prev_push: float = pushes[y][x-1]
+				var p_prev_a: Vector3 = p_a - Vector3.UP * (push - prev_push)
+				var p_prev_b: Vector3 = p_b - Vector3.UP * (push - prev_push)
+				_add_quad(surface, p_a, color, p_prev_a, color, p_prev_b, color, p_b, color)
+			elif x == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_prev_a: Vector3 = p_a - Vector3.UP * push
+				var p_prev_b: Vector3 = p_b - Vector3.UP * push
+				_add_quad(surface, p_a, color, p_prev_a, color, p_prev_b, color, p_b, color)
+
+			if x < segments - 1 and (push - float(pushes[y][x+1])) > MIN_GEOMETRY_PUSH_DELTA:
+				var next_push: float = pushes[y][x+1]
+				var p_next_d: Vector3 = p_d - Vector3.UP * (push - next_push)
+				var p_next_c: Vector3 = p_c - Vector3.UP * (push - next_push)
+				_add_quad(surface, p_c, color, p_next_c, color, p_next_d, color, p_d, color)
+			elif x == segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_next_d: Vector3 = p_d - Vector3.UP * push
+				var p_next_c: Vector3 = p_c - Vector3.UP * push
+				_add_quad(surface, p_c, color, p_next_c, color, p_next_d, color, p_d, color)
+
+			if y > 0 and (push - float(pushes[y-1][x])) > MIN_GEOMETRY_PUSH_DELTA:
+				var top_push: float = pushes[y-1][x]
+				var p_top_a: Vector3 = p_a - Vector3.UP * (push - top_push)
+				var p_top_d: Vector3 = p_d - Vector3.UP * (push - top_push)
+				_add_quad(surface, p_d, color, p_top_d, color, p_top_a, color, p_a, color)
+			elif y == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_top_a: Vector3 = p_a - Vector3.UP * push
+				var p_top_d: Vector3 = p_d - Vector3.UP * push
+				_add_quad(surface, p_d, color, p_top_d, color, p_top_a, color, p_a, color)
+
+			if y < segments - 1 and (push - float(pushes[y+1][x])) > MIN_GEOMETRY_PUSH_DELTA:
+				var bot_push: float = pushes[y+1][x]
+				var p_bot_b: Vector3 = p_b - Vector3.UP * (push - bot_push)
+				var p_bot_c: Vector3 = p_c - Vector3.UP * (push - bot_push)
+				_add_quad(surface, p_b, color, p_bot_b, color, p_bot_c, color, p_c, color)
+			elif y == segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_bot_b: Vector3 = p_b - Vector3.UP * push
+				var p_bot_c: Vector3 = p_c - Vector3.UP * push
+				_add_quad(surface, p_b, color, p_bot_b, color, p_bot_c, color, p_c, color)
+
 func _add_cliff_face(
 	surface: SurfaceTool,
 	top_a: Vector3,
@@ -885,46 +1135,122 @@ func _add_cliff_face(
 	top_b_sample: Dictionary,
 	base_a: Vector3,
 	base_b: Vector3,
-	outward: Vector3
+	_outward: Vector3,
+	is_shore: bool
 ) -> void:
-	var avg_height: float = (top_a.y + top_b.y) * 0.5
 	var avg_cliff: float = (float(top_a_sample.get("cliff", 0.0)) + float(top_b_sample.get("cliff", 0.0))) * 0.5
-	var avg_ledge: float = (float(top_a_sample.get("ledge", 0.0)) + float(top_b_sample.get("ledge", 0.0))) * 0.5
 	var avg_foot: float = (float(top_a_sample.get("foot", 0.0)) + float(top_b_sample.get("foot", 0.0))) * 0.5
-	if avg_height < 0.42 or avg_cliff < 0.18:
+	var avg_ledge: float = (float(top_a_sample.get("ledge", 0.0)) + float(top_b_sample.get("ledge", 0.0))) * 0.5
+	var avg_ridge: float = (float(top_a_sample.get("ridge", 0.0)) + float(top_b_sample.get("ridge", 0.0))) * 0.5
+	var avg_height: float = ((top_a.y - base_a.y) + (top_b.y - base_b.y)) * 0.5
+	if avg_height <= MIN_VISIBLE_HEIGHT:
+		return
+	
+	if avg_height < 0.48:
 		_add_quad(
 			surface,
 			top_a,
-			_vertex_color(_face_sample(top_a_sample, avg_cliff, avg_foot)),
+			_vertex_color(_face_sample(top_a_sample, maxf(avg_cliff, 0.26), avg_foot)),
 			top_b,
-			_vertex_color(_face_sample(top_b_sample, avg_cliff, avg_foot)),
+			_vertex_color(_face_sample(top_b_sample, maxf(avg_cliff, 0.26), avg_foot)),
 			base_b,
 			_vertex_color(_ground_sample(top_b_sample)),
 			base_a,
 			_vertex_color(_ground_sample(top_a_sample))
 		)
 		return
-
-	var face_break_y: float = maxf(0.24, avg_height * (0.48 + (avg_ledge * 0.14)))
-	var shelf_y: float = maxf(0.12, face_break_y - (0.22 + (avg_foot * 0.14)))
-	var face_push: float = 0.12 + (avg_cliff * 0.22)
-	var shelf_push: float = face_push + (0.10 + (avg_ledge * 0.18))
-	var mid_a := Vector3(top_a.x + (outward.x * face_push), face_break_y, top_a.z + (outward.z * face_push))
-	var mid_b := Vector3(top_b.x + (outward.x * face_push), face_break_y, top_b.z + (outward.z * face_push))
-	var mid_a_sample := _face_sample(top_a_sample, avg_cliff + 0.10, avg_foot + 0.04)
-	var mid_b_sample := _face_sample(top_b_sample, avg_cliff + 0.10, avg_foot + 0.04)
-
-	_add_quad(surface, top_a, _vertex_color(mid_a_sample), top_b, _vertex_color(mid_b_sample), mid_b, _vertex_color(mid_b_sample), mid_a, _vertex_color(mid_a_sample))
-	if avg_ledge > 0.16:
-		var shelf_a := Vector3(mid_a.x + (outward.x * shelf_push), shelf_y, mid_a.z + (outward.z * shelf_push))
-		var shelf_b := Vector3(mid_b.x + (outward.x * shelf_push), shelf_y, mid_b.z + (outward.z * shelf_push))
-		var shelf_a_sample := _face_sample(top_a_sample, avg_cliff + 0.04, avg_foot + 0.10, 0.74)
-		var shelf_b_sample := _face_sample(top_b_sample, avg_cliff + 0.04, avg_foot + 0.10, 0.74)
-		_add_quad(surface, mid_a, _vertex_color(mid_a_sample), mid_b, _vertex_color(mid_b_sample), shelf_b, _vertex_color(shelf_b_sample), shelf_a, _vertex_color(shelf_a_sample))
-		_add_quad(surface, shelf_a, _vertex_color(shelf_a_sample), shelf_b, _vertex_color(shelf_b_sample), base_b, _vertex_color(_ground_sample(top_b_sample)), base_a, _vertex_color(_ground_sample(top_a_sample)))
-		return
-
-	_add_quad(surface, mid_a, _vertex_color(mid_a_sample), mid_b, _vertex_color(mid_b_sample), base_b, _vertex_color(_ground_sample(top_b_sample)), base_a, _vertex_color(_ground_sample(top_a_sample)))
+	
+	var outward: Vector3 = _outward.normalized() if _outward.length_squared() > 0.00001 else Vector3.ZERO
+	var phase: float = _noise_01(
+		int(roundi((top_a.x + top_b.x) * 1.7)),
+		int(roundi((top_a.z + top_b.z) * 1.7)),
+		int(roundi((top_a.y + top_b.y) * 23.0))
+	)
+	var vertical_segments: int = CLIFF_VERTICAL_SEGMENTS
+	if avg_height < 1.6:
+		vertical_segments = maxi(2, CLIFF_VERTICAL_SEGMENTS - 1)
+	var horizontal_segments: int = CLIFF_HORIZONTAL_SEGMENTS
+	if not is_shore and avg_height < 1.2:
+		horizontal_segments = maxi(2, CLIFF_HORIZONTAL_SEGMENTS - 1)
+	
+	var grid_pushes: Array = []
+	var grid_colors: Array = []
+	for y_index in range(vertical_segments):
+		var row_pushes: Array = []
+		var row_colors: Array = []
+		for x_index in range(horizontal_segments):
+			var u: float = (float(x_index) + 0.5) / float(horizontal_segments)
+			var v: float = (float(y_index) + 0.5) / float(vertical_segments)
+			var block_data: Dictionary = _cliff_face_block_data(
+				top_a, top_a_sample, top_b, top_b_sample, base_a, base_b,
+				avg_cliff, avg_foot, avg_ledge, avg_ridge, u, v, phase, is_shore
+			)
+			row_pushes.append(float(block_data.get("push", 0.0)))
+			row_colors.append(Color(block_data.get("color", Color.WHITE)))
+		grid_pushes.append(row_pushes)
+		grid_colors.append(row_colors)
+	
+	for y in range(vertical_segments):
+		var v0: float = float(y) / float(vertical_segments)
+		var v1: float = float(y + 1) / float(vertical_segments)
+		for x in range(horizontal_segments):
+			var u0: float = float(x) / float(horizontal_segments)
+			var u1: float = float(x + 1) / float(horizontal_segments)
+			
+			var push: float = grid_pushes[y][x]
+			var color: Color = grid_colors[y][x]
+			
+			var tp_u0: Vector3 = top_a.lerp(top_b, u0)
+			var tp_u1: Vector3 = top_a.lerp(top_b, u1)
+			var bp_u0: Vector3 = base_a.lerp(base_b, u0)
+			var bp_u1: Vector3 = base_a.lerp(base_b, u1)
+			
+			var p_a: Vector3 = tp_u0.lerp(bp_u0, v0) + outward * push
+			var p_b: Vector3 = tp_u1.lerp(bp_u1, v0) + outward * push
+			var p_c: Vector3 = tp_u1.lerp(bp_u1, v1) + outward * push
+			var p_d: Vector3 = tp_u0.lerp(bp_u0, v1) + outward * push
+			
+			_add_quad(surface, p_a, color, p_b, color, p_c, color, p_d, color)
+			
+			if x > 0 and (push - float(grid_pushes[y][x-1])) > MIN_GEOMETRY_PUSH_DELTA:
+				var prev_push: float = grid_pushes[y][x-1]
+				var p_prev_a: Vector3 = p_a - outward * (push - prev_push)
+				var p_prev_d: Vector3 = p_d - outward * (push - prev_push)
+				_add_quad(surface, p_prev_a, color, p_a, color, p_d, color, p_prev_d, color)
+			elif x == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_prev_a: Vector3 = p_a - outward * push
+				var p_prev_d: Vector3 = p_d - outward * push
+				_add_quad(surface, p_prev_a, color, p_a, color, p_d, color, p_prev_d, color)
+			
+			if x < horizontal_segments - 1 and (push - float(grid_pushes[y][x+1])) > MIN_GEOMETRY_PUSH_DELTA:
+				var next_push: float = grid_pushes[y][x+1]
+				var p_next_b: Vector3 = p_b - outward * (push - next_push)
+				var p_next_c: Vector3 = p_c - outward * (push - next_push)
+				_add_quad(surface, p_b, color, p_next_b, color, p_next_c, color, p_c, color)
+			elif x == horizontal_segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_next_b: Vector3 = p_b - outward * push
+				var p_next_c: Vector3 = p_c - outward * push
+				_add_quad(surface, p_b, color, p_next_b, color, p_next_c, color, p_c, color)
+			
+			if y > 0 and (push - float(grid_pushes[y-1][x])) > MIN_GEOMETRY_PUSH_DELTA:
+				var top_push: float = grid_pushes[y-1][x]
+				var p_top_a: Vector3 = p_a - outward * (push - top_push)
+				var p_top_b: Vector3 = p_b - outward * (push - top_push)
+				_add_quad(surface, p_top_a, color, p_top_b, color, p_b, color, p_a, color)
+			elif y == 0 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_top_a: Vector3 = p_a - outward * push
+				var p_top_b: Vector3 = p_b - outward * push
+				_add_quad(surface, p_top_a, color, p_top_b, color, p_b, color, p_a, color)
+			
+			if y < vertical_segments - 1 and (push - float(grid_pushes[y+1][x])) > MIN_GEOMETRY_PUSH_DELTA:
+				var bot_push: float = grid_pushes[y+1][x]
+				var p_bot_d: Vector3 = p_d - outward * (push - bot_push)
+				var p_bot_c: Vector3 = p_c - outward * (push - bot_push)
+				_add_quad(surface, p_d, color, p_c, color, p_bot_c, color, p_bot_d, color)
+			elif y == vertical_segments - 1 and push > MIN_GEOMETRY_PUSH_DELTA:
+				var p_bot_d: Vector3 = p_d - outward * push
+				var p_bot_c: Vector3 = p_c - outward * push
+				_add_quad(surface, p_d, color, p_c, color, p_bot_c, color, p_bot_d, color)
 
 func _add_quad(
 	surface: SurfaceTool,
@@ -937,8 +1263,46 @@ func _add_quad(
 	d: Vector3,
 	d_color: Color
 ) -> void:
-	_add_triangle(surface, a, a_color, b, b_color, c, c_color)
-	_add_triangle(surface, a, a_color, c, c_color, d, d_color)
+	var quad_normal: Vector3 = (b - a).cross(d - a)
+	if quad_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
+		quad_normal = (b - a).cross(c - a)
+	if quad_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
+		quad_normal = (c - a).cross(d - a)
+	if quad_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
+		return
+	quad_normal = quad_normal.normalized()
+	_add_triangle_with_normal(surface, a, a_color, b, b_color, c, c_color, quad_normal)
+	_add_triangle_with_normal(surface, a, a_color, c, c_color, d, d_color, quad_normal)
+
+func _add_triangle_with_normal(
+	surface: SurfaceTool,
+	a: Vector3,
+	a_color: Color,
+	b: Vector3,
+	b_color: Color,
+	c: Vector3,
+	c_color: Color,
+	normal: Vector3
+) -> void:
+	if (b - a).cross(c - a).length_squared() <= MIN_TRIANGLE_AREA_SQ:
+		return
+	var safe_normal: Vector3 = normal
+	if safe_normal.length_squared() <= 0.000001:
+		safe_normal = (b - a).cross(c - a)
+		if safe_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
+			return
+		safe_normal = safe_normal.normalized()
+	else:
+		safe_normal = safe_normal.normalized()
+	surface.set_normal(safe_normal)
+	surface.set_color(a_color)
+	surface.add_vertex(a)
+	surface.set_normal(safe_normal)
+	surface.set_color(b_color)
+	surface.add_vertex(b)
+	surface.set_normal(safe_normal)
+	surface.set_color(c_color)
+	surface.add_vertex(c)
 
 func _add_triangle(
 	surface: SurfaceTool,
@@ -950,10 +1314,9 @@ func _add_triangle(
 	c_color: Color
 ) -> void:
 	var normal: Vector3 = (b - a).cross(c - a)
-	if normal.length_squared() <= 0.000001:
-		normal = Vector3.UP
-	else:
-		normal = normal.normalized()
+	if normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
+		return
+	normal = normal.normalized()
 	surface.set_normal(normal)
 	surface.set_color(a_color)
 	surface.add_vertex(a)
@@ -985,6 +1348,26 @@ func _side_corners(cell: Vector2i, side_name: String) -> Array:
 			return [Vector2i(cell.x + 1, cell.y + 1), Vector2i(cell.x, cell.y + 1)]
 		_:
 			return [Vector2i(cell.x, cell.y + 1), Vector2i(cell.x, cell.y)]
+
+func _build_shore_side_map(cells: Array, cell_set: Dictionary, map_data: MapData) -> Dictionary:
+	var shore_sides: Dictionary = {}
+	if map_data == null:
+		return shore_sides
+	for raw_cell in cells:
+		var cell: Vector2i = raw_cell
+		for side_name in ["north", "east", "south", "west"]:
+			var neighbor: Vector2i = _boundary_neighbor(cell, side_name)
+			if cell_set.has(neighbor):
+				continue
+			var neighbor_tile = map_data.get_tile(neighbor.x, neighbor.y)
+			if neighbor_tile == null:
+				continue
+			if neighbor_tile.is_water or neighbor_tile.base_terrain_type == MapTypes.TerrainType.WATER:
+				shore_sides[_cell_side_key(cell, side_name)] = true
+	return shore_sides
+
+func _cell_side_key(cell: Vector2i, side_name: String) -> String:
+	return "%d:%d:%s" % [cell.x, cell.y, side_name]
 
 func _boundary_side_dir(side_name: String) -> Vector2:
 	match side_name:

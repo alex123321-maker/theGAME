@@ -92,6 +92,49 @@ func stamp_approach_regions(map_data: MapData, composition: Dictionary) -> void:
 				if not tile.debug_tags.has("approach_corridor"):
 					tile.debug_tags.append("approach_corridor")
 
+func sync_approach_regions_to_roads(map_data: MapData, composition: Dictionary) -> void:
+	var entry_region_by_point: Dictionary = {}
+	for entry_spec in composition.get("entries", []):
+		var entry_point: Vector2i = entry_spec.get("point", Vector2i.ZERO)
+		entry_region_by_point[entry_point] = int(entry_spec.get("region_id", 100))
+
+	for tile in map_data.tiles:
+		if tile.region_type != MapTypes.RegionType.APPROACH_CORRIDOR:
+			continue
+		tile.region_id = 1
+		tile.region_type = MapTypes.RegionType.OPEN_GROUND
+		tile.debug_tags.erase("approach_corridor")
+
+	for road in map_data.roads:
+		var entry_point: Vector2i = _dict_to_vec2i(road.get("entry_point", {}))
+		var region_id: int = int(entry_region_by_point.get(entry_point, 100))
+		map_data.register_region(region_id, MapTypes.RegionType.APPROACH_CORRIDOR, "approach_synced", {})
+		var paint_tiles: Array = road.get("tiles", [])
+		if paint_tiles.is_empty():
+			paint_tiles = road.get("spine_tiles", [])
+		for raw_point in paint_tiles:
+			var point: Vector2i = _dict_to_vec2i(raw_point)
+			if not map_data.is_in_bounds(point.x, point.y):
+				continue
+			var tile = map_data.get_tile(point.x, point.y)
+			if tile == null:
+				continue
+			if tile.region_type == MapTypes.RegionType.CENTER_CLEARING:
+				continue
+			if tile.base_terrain_type == MapTypes.TerrainType.WATER and not tile.is_bridge:
+				continue
+			tile.region_id = region_id
+			tile.region_type = MapTypes.RegionType.APPROACH_CORRIDOR
+			if not tile.debug_tags.has("approach_corridor"):
+				tile.debug_tags.append("approach_corridor")
+
+func _dict_to_vec2i(value) -> Vector2i:
+	if value is Vector2i:
+		return value
+	if value is Dictionary:
+		return Vector2i(int(value.get("x", 0)), int(value.get("y", 0)))
+	return Vector2i.ZERO
+
 func _grow_clearing_points(
 	map_data: MapData,
 	center: Vector2,

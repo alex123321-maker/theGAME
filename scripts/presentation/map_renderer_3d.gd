@@ -5,6 +5,9 @@ const WorldGridProjection3DClass = preload("res://scripts/presentation/world_gri
 const MapDebugOverlayClass = preload("res://scripts/presentation/map_debug_overlay.gd")
 const MountainRegionBuilderClass = preload("res://scripts/presentation/mountain_region_builder.gd")
 const MountainSurfaceShader = preload("res://scripts/presentation/mountain_surface.gdshader")
+const MountainDetailAlbedoTexture = preload("res://assets/custom/ground_replacement_texture_pbr_20250901.png")
+const MountainDetailNormalTexture = preload("res://assets/custom/ground_replacement_texture_pbr_20250901_normal.png")
+const MountainDetailRoughnessTexture = preload("res://assets/custom/ground_replacement_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.png")
 
 const TERRAIN_Y: float = 0.0
 const WATER_Y: float = -0.10
@@ -448,6 +451,14 @@ func _mountain_surface_material() -> ShaderMaterial:
 	_mountain_material.shader = MountainSurfaceShader
 	_mountain_material.set_shader_parameter("light_ramp", _mountain_ramp())
 	_mountain_material.set_shader_parameter("light_direction", _mountain_light_direction)
+	_mountain_material.set_shader_parameter("detail_albedo_tex", MountainDetailAlbedoTexture)
+	_mountain_material.set_shader_parameter("detail_normal_tex", MountainDetailNormalTexture)
+	_mountain_material.set_shader_parameter("detail_roughness_tex", MountainDetailRoughnessTexture)
+	_mountain_material.set_shader_parameter("detail_uv_scale", 0.10)
+	_mountain_material.set_shader_parameter("detail_albedo_strength", 0.30)
+	_mountain_material.set_shader_parameter("detail_cavity_strength", 0.16)
+	_mountain_material.set_shader_parameter("detail_micro_shadow_strength", 0.10)
+	_mountain_material.set_shader_parameter("detail_roughness_strength", 0.42)
 	return _mountain_material
 
 func _mountain_ramp() -> GradientTexture1D:

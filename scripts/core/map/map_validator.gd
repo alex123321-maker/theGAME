@@ -26,6 +26,10 @@ func validate(map_data: MapData, generation_config = null) -> Dictionary:
 		"bridge_tile_count": 0,
 		"water_tile_count": 0,
 		"blocker_tile_count": 0,
+		"invalid_road_water_tiles": 0,
+		"invalid_bridge_tiles": 0,
+		"orphan_bridge_tiles": 0,
+		"max_road_detour_ratio": 0.0,
 	}
 
 	if map_data.entry_points.size() < expected_entry_count:
@@ -35,6 +39,7 @@ func validate(map_data: MapData, generation_config = null) -> Dictionary:
 		errors.append("missing_central_zone")
 
 	for tile in map_data.tiles:
+		var base_is_water: bool = tile.base_terrain_type == MapTypes.TerrainType.WATER
 		if tile.is_buildable:
 			metrics["buildable_tiles"] += 1
 		if tile.is_road:
@@ -45,6 +50,26 @@ func validate(map_data: MapData, generation_config = null) -> Dictionary:
 			metrics["water_tile_count"] += 1
 		if tile.is_blocked:
 			metrics["blocker_tile_count"] += 1
+		if tile.is_road and base_is_water and not tile.is_bridge:
+			metrics["invalid_road_water_tiles"] += 1
+		if tile.is_bridge and not base_is_water:
+			metrics["invalid_bridge_tiles"] += 1
+		if tile.is_bridge and not tile.is_road:
+			metrics["orphan_bridge_tiles"] += 1
+
+	for road in map_data.roads:
+		var entry: Dictionary = road.get("entry_point", {})
+		var attach: Dictionary = road.get("attach_point", {})
+		var entry_point := Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))
+		var attach_point := Vector2i(int(attach.get("x", 0)), int(attach.get("y", 0)))
+		var direct_length: int = absi(entry_point.x - attach_point.x) + absi(entry_point.y - attach_point.y)
+		var spine_length: int = Array(road.get("spine_tiles", [])).size()
+		if spine_length <= 0:
+			spine_length = Array(road.get("tiles", [])).size()
+		if spine_length <= 0:
+			continue
+		var detour_ratio: float = float(spine_length) / float(maxi(1, direct_length))
+		metrics["max_road_detour_ratio"] = maxf(float(metrics.get("max_road_detour_ratio", 0.0)), detour_ratio)
 
 	var center_targets := {}
 	for point in map_data.central_zone_tiles:
@@ -90,6 +115,14 @@ func validate(map_data: MapData, generation_config = null) -> Dictionary:
 
 	if metrics["road_tile_count"] <= 0:
 		errors.append("missing_roads")
+	if int(metrics.get("invalid_road_water_tiles", 0)) > 0:
+		errors.append("road_over_water_without_bridge")
+	if int(metrics.get("orphan_bridge_tiles", 0)) > 0:
+		errors.append("bridge_tile_without_road")
+	if int(metrics.get("invalid_bridge_tiles", 0)) > 0:
+		warnings.append("bridge_outside_water")
+	if float(metrics.get("max_road_detour_ratio", 0.0)) > 2.2:
+		warnings.append("road_detour_excessive")
 	var expects_water: bool = false
 	for region in map_data.regions:
 		if int(region.get("type", MapTypes.RegionType.NONE)) == MapTypes.RegionType.WATER_REGION:

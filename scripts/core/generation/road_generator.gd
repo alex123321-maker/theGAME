@@ -4,7 +4,10 @@ class_name RoadGenerator
 const GenerationUtilsClass = preload("res://scripts/core/generation/generation_utils.gd")
 const INF_COST: float = 1_000_000.0
 const BRIDGE_MAX_WATER_SPAN: int = 6
-const BRIDGE_BASE_PENALTY: float = 14.0
+const BRIDGE_BASE_PENALTY: float = 8.0
+const BRIDGE_DETOUR_TRIGGER: float = 1.28
+const MAX_SCENIC_OVERSHOOT_RATIO: float = 1.34
+const BRIDGE_EVAL_DETOUR_RATIO: float = 1.18
 
 func generate(map_data: MapData, _rng: RandomNumberGenerator, config, composition: Dictionary) -> void:
 	var center_points: Array[Vector2i] = map_data.central_zone_tiles
@@ -50,14 +53,42 @@ func generate(map_data: MapData, _rng: RandomNumberGenerator, config, compositio
 		pending_entries = next_pending
 		pass_index += 1
 
-func _find_path_with_fallback(map_data: MapData, from_point: Vector2i, to_point: Vector2i) -> Array[Vector2i]:
-	var path: Array[Vector2i] = _a_star_path(map_data, from_point, to_point, false)
-	if not path.is_empty():
-		return path
-	path = _path_via_bridge(map_data, from_point, to_point)
-	if not path.is_empty():
-		return path
-	path = _a_star_path(map_data, from_point, to_point, true)
+func _find_path_with_fallback(
+	map_data: MapData,
+	from_point: Vector2i,
+	to_point: Vector2i,
+	allow_bridge_eval: bool = true
+) -> Array[Vector2i]:
+	var dry_path: Array[Vector2i] = _a_star_path(map_data, from_point, to_point, false)
+	if not allow_bridge_eval:
+		if not dry_path.is_empty():
+			return dry_path
+		var soft_path: Array[Vector2i] = _a_star_path(map_data, from_point, to_point, true)
+		if not soft_path.is_empty():
+			return soft_path
+		return _emergency_straight_path(map_data, from_point, to_point)
+
+	if not dry_path.is_empty():
+		var manhattan: float = _heuristic(from_point, to_point)
+		var dry_detour_ratio: float = float(dry_path.size()) / maxf(1.0, manhattan)
+		if dry_detour_ratio <= BRIDGE_EVAL_DETOUR_RATIO:
+			return dry_path
+
+	var bridge_path: Array[Vector2i] = _path_via_bridge(map_data, from_point, to_point)
+	if not dry_path.is_empty() and not bridge_path.is_empty():
+		var dry_score: float = _route_physical_score(map_data, dry_path)
+		var bridge_score: float = _route_physical_score(map_data, bridge_path)
+		var dry_length: float = float(dry_path.size())
+		var bridge_length: float = float(bridge_path.size())
+		var detour_ratio: float = dry_length / maxf(1.0, bridge_length)
+		if bridge_score <= dry_score or detour_ratio >= BRIDGE_DETOUR_TRIGGER:
+			return bridge_path
+		return dry_path
+	if not bridge_path.is_empty():
+		return bridge_path
+	if not dry_path.is_empty():
+		return dry_path
+	var path: Array[Vector2i] = _a_star_path(map_data, from_point, to_point, true)
 	if not path.is_empty():
 		return path
 	return _emergency_straight_path(map_data, from_point, to_point)
@@ -83,7 +114,24 @@ func _plan_entry_route(
 		candidates.append(scenic_path)
 	if candidates.is_empty():
 		return []
-	return _best_route_candidate(candidates, entry_point, attach_point, curvature_strength)
+	var best_path: Array[Vector2i] = _best_route_candidate(candidates, entry_point, attach_point, curvature_strength)
+	if not direct_path.is_empty() and not best_path.is_empty():
+		var scenic_ratio: float = float(best_path.size()) / maxf(1.0, float(direct_path.size()))
+		if scenic_ratio > MAX_SCENIC_OVERSHOOT_RATIO:
+			return direct_path
+	return best_path
+
+func _route_physical_score(map_data: MapData, path: Array[Vector2i]) -> float:
+	if path.is_empty():
+		return INF_COST
+	var bridge_span: int = 0
+	for point in path:
+		var tile = map_data.get_tile(point.x, point.y)
+		if tile == null:
+			continue
+		if tile.is_water or tile.base_terrain_type == MapTypes.TerrainType.WATER:
+			bridge_span += 1
+	return float(path.size()) + (float(bridge_span) * BRIDGE_BASE_PENALTY)
 
 func _a_star_path(map_data: MapData, from_point: Vector2i, to_point: Vector2i, allow_soft_break: bool) -> Array[Vector2i]:
 	var start: Vector2i = _nearest_traversable_point(map_data, from_point, allow_soft_break)
@@ -129,10 +177,10 @@ func _find_path_via_waypoint(
 	to_point: Vector2i,
 	waypoint: Vector2i
 ) -> Array[Vector2i]:
-	var first_leg: Array[Vector2i] = _find_path_with_fallback(map_data, from_point, waypoint)
+	var first_leg: Array[Vector2i] = _find_path_with_fallback(map_data, from_point, waypoint, false)
 	if first_leg.is_empty():
 		return []
-	var second_leg: Array[Vector2i] = _find_path_with_fallback(map_data, waypoint, to_point)
+	var second_leg: Array[Vector2i] = _find_path_with_fallback(map_data, waypoint, to_point, false)
 	if second_leg.is_empty():
 		return []
 	var combined: Array[Vector2i] = first_leg.duplicate()
@@ -318,8 +366,8 @@ func _bridge_candidates(map_data: MapData, from_point: Vector2i, to_point: Vecto
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return float(a.get("sort_score", INF_COST)) < float(b.get("sort_score", INF_COST))
 	)
-	if candidates.size() > 24:
-		candidates.resize(24)
+	if candidates.size() > 12:
+		candidates.resize(12)
 	return candidates
 
 func _is_bridge_bank_tile(tile) -> bool:
@@ -355,24 +403,32 @@ func _closest_center_point(points: Array[Vector2i], origin: Vector2i) -> Vector2
 			best_point = point
 	return best_point
 
-func _select_attach_point(points: Array[Vector2i], origin: Vector2i, map_data: MapData, composition: Dictionary) -> Vector2i:
+func _select_attach_point(points: Array[Vector2i], origin: Vector2i, map_data: MapData, _composition: Dictionary) -> Vector2i:
 	if points.size() <= 1:
 		return points[0]
-	var center: Vector2 = composition.get("center", Vector2(float(map_data.width) * 0.5, float(map_data.height) * 0.5))
-	var desired_direction: Vector2 = (center - Vector2(origin)).normalized()
-	if desired_direction == Vector2.ZERO:
-		desired_direction = Vector2.RIGHT
-	var best_point: Vector2i = points[0]
-	var best_score: float = -INF_COST
-	for point in points:
-		var delta: Vector2 = Vector2(point) - center
-		var radial_alignment: float = 0.0 if delta == Vector2.ZERO else delta.normalized().dot(desired_direction)
-		var distance_penalty: float = Vector2(point).distance_to(Vector2(origin)) * 0.08
-		var score: float = radial_alignment - distance_penalty
-		if score > best_score:
+	var candidates: Array[Vector2i] = _nearest_attach_candidates(points, origin, 6)
+	var best_point: Vector2i = candidates[0]
+	var best_score: float = INF_COST
+	for point in candidates:
+		var path: Array[Vector2i] = _find_path_with_fallback(map_data, origin, point, false)
+		if path.is_empty():
+			continue
+		var score: float = _route_physical_score(map_data, path)
+		if score < best_score:
 			best_score = score
 			best_point = point
-	return best_point
+	if best_score < INF_COST:
+		return best_point
+	return _closest_center_point(points, origin)
+
+func _nearest_attach_candidates(points: Array[Vector2i], origin: Vector2i, limit: int) -> Array[Vector2i]:
+	var ordered: Array[Vector2i] = points.duplicate()
+	ordered.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.distance_to(origin) < b.distance_to(origin)
+	)
+	if ordered.size() > limit:
+		ordered.resize(limit)
+	return ordered
 
 func _route_waypoint_candidates(
 	map_data: MapData,
