@@ -19,9 +19,9 @@ uniform float detail_cavity_strength : hint_range(0.0, 1.0) = 0.03;
 uniform float detail_micro_shadow_strength : hint_range(0.0, 1.0) = 0.02;
 uniform float detail_roughness_strength : hint_range(0.0, 1.0) = 0.08;
 uniform float large_noise_scale : hint_range(0.01, 1.0) = 0.10;
-uniform float large_noise_strength : hint_range(0.0, 0.2) = 0.02;
+uniform float large_noise_strength : hint_range(0.0, 0.2) = 0.004;
 uniform float crack_scale : hint_range(0.05, 2.0) = 0.28;
-uniform float crack_strength : hint_range(0.0, 1.0) = 0.16;
+uniform float crack_strength : hint_range(0.0, 1.0) = 0.02;
 
 varying vec3 local_position;
 varying vec3 world_position;

@@ -9,10 +9,12 @@ const MountainRockDetailAlbedoPath: String = "res://assets/custom/rock_detail_al
 const MountainRockDetailNormalPath: String = "res://assets/custom/rock_detail_normal_tile.png"
 const MountainRockDetailRoughnessPath: String = "res://assets/custom/rock_detail_roughness_tile.png"
 const MountainDetailUVScale: float = 0.045
-const MountainDetailAlbedoStrength: float = 0.08
-const MountainDetailCavityStrength: float = 0.03
-const MountainDetailMicroShadowStrength: float = 0.02
-const MountainDetailRoughnessStrength: float = 0.10
+const MountainDetailAlbedoStrength: float = 0.0
+const MountainDetailCavityStrength: float = 0.0
+const MountainDetailMicroShadowStrength: float = 0.0
+const MountainDetailRoughnessStrength: float = 0.0
+const MountainLargeNoiseStrength: float = 0.004
+const MountainCrackStrength: float = 0.0
 
 const TERRAIN_Y: float = 0.0
 const WATER_Y: float = -0.10
@@ -456,6 +458,8 @@ func _mountain_surface_material() -> ShaderMaterial:
 	_mountain_material.shader = MountainSurfaceShader
 	_mountain_material.set_shader_parameter("light_ramp", _mountain_ramp())
 	_mountain_material.set_shader_parameter("light_direction", _mountain_light_direction)
+	_mountain_material.set_shader_parameter("large_noise_strength", MountainLargeNoiseStrength)
+	_mountain_material.set_shader_parameter("crack_strength", MountainCrackStrength)
 	var has_rock_detail: bool = _apply_mountain_detail_textures(_mountain_material)
 	_mountain_material.set_shader_parameter("detail_uv_scale", MountainDetailUVScale)
 	if has_rock_detail:

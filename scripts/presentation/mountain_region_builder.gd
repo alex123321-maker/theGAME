@@ -100,6 +100,7 @@ func build_profiles(map_data: MapData) -> Array[Dictionary]:
 func build_mesh(profile: Dictionary):
 	var cells: Array = profile.get("cells", [])
 	var cell_set: Dictionary = profile.get("cell_set", {})
+	var corner_samples: Dictionary = profile.get("corner_samples", {})
 	var stepped_height_map: Dictionary = profile.get("stepped_height_map", profile.get("height_map", {}))
 	var zone_map: Dictionary = profile.get("zone_map", {})
 	var shore_sides: Dictionary = profile.get("shore_sides", {})
@@ -141,7 +142,8 @@ func build_mesh(profile: Dictionary):
 			nw,
 			ne,
 			Vector3(0.0, 0.0, -1.0),
-			shore_sides
+			shore_sides,
+			_side_offset_hint(corner_samples, nw_corner, ne_corner, Vector3(0.0, 0.0, -1.0))
 		):
 			has_geometry = true
 
@@ -156,7 +158,8 @@ func build_mesh(profile: Dictionary):
 			ne,
 			se,
 			Vector3(1.0, 0.0, 0.0),
-			shore_sides
+			shore_sides,
+			_side_offset_hint(corner_samples, ne_corner, se_corner, Vector3(1.0, 0.0, 0.0))
 		):
 			has_geometry = true
 
@@ -171,7 +174,8 @@ func build_mesh(profile: Dictionary):
 			se,
 			sw,
 			Vector3(0.0, 0.0, 1.0),
-			shore_sides
+			shore_sides,
+			_side_offset_hint(corner_samples, se_corner, sw_corner, Vector3(0.0, 0.0, 1.0))
 		):
 			has_geometry = true
 
@@ -186,7 +190,8 @@ func build_mesh(profile: Dictionary):
 			sw,
 			nw,
 			Vector3(-1.0, 0.0, 0.0),
-			shore_sides
+			shore_sides,
+			_side_offset_hint(corner_samples, sw_corner, nw_corner, Vector3(-1.0, 0.0, 0.0))
 		):
 			has_geometry = true
 
@@ -965,7 +970,8 @@ func _add_side_cliff_if_needed(
 	top_a: Vector3,
 	top_b: Vector3,
 	outward: Vector3,
-	shore_sides: Dictionary
+	shore_sides: Dictionary,
+	side_offset_hint: float = 0.0
 ) -> bool:
 	var top_height: float = top_a.y
 	var is_boundary: bool = not cell_set.has(neighbor)
@@ -974,14 +980,87 @@ func _add_side_cliff_if_needed(
 		base_height = float(height_map.get(neighbor, 0.0))
 		if top_height <= base_height + MIN_VISIBLE_HEIGHT:
 			return false
-	if top_height - base_height <= MIN_VISIBLE_HEIGHT:
+	var drop: float = top_height - base_height
+	if drop <= MIN_VISIBLE_HEIGHT:
 		return false
-
-	var base_a: Vector3 = Vector3(top_a.x, base_height, top_a.z)
-	var base_b: Vector3 = Vector3(top_b.x, base_height, top_b.z)
 	var is_shore: bool = is_boundary and bool(shore_sides.get(_cell_side_key(cell, side_name), false))
-	_add_cliff_face(surface, top_a, cell_sample, top_b, cell_sample, base_a, base_b, outward, is_shore)
+
+	var segment_count: int = clampi(int(ceili(drop / HEIGHT_STEP)), 1, 4)
+	var segment_height: float = drop / float(segment_count)
+	var cliff_strength: float = clampf(float(cell_sample.get("cliff", 0.0)), 0.0, 1.0)
+	var ledge_strength: float = clampf(float(cell_sample.get("ledge", 0.0)), 0.0, 1.0)
+	var foot_strength: float = clampf(float(cell_sample.get("foot", 0.0)), 0.0, 1.0)
+	var silhouette_amp: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * (0.04 + (cliff_strength * 0.06) + (ledge_strength * 0.03))
+	if not is_boundary:
+		silhouette_amp *= 0.82
+	if is_shore:
+		silhouette_amp *= 1.12
+
+	var prev_offset: float = 0.0
+	for segment_index in range(segment_count):
+		var segment_t0: float = float(segment_index) / float(segment_count)
+		var segment_t1: float = float(segment_index + 1) / float(segment_count)
+		var y_top: float = top_height - (drop * segment_t0)
+		var y_bottom: float = top_height - (drop * segment_t1)
+
+		var side_wave: float = sin((float(cell.x * 3 + cell.y * 5) * 0.31) + (float(segment_index) * 1.41)) * 0.5 + 0.5
+		var side_noise: float = _noise_01(
+			cell.x + int(outward.x * 17.0) + (segment_index * 11),
+			cell.y + int(outward.z * 17.0) - (segment_index * 7),
+			733 + (17 if is_shore else 0)
+		)
+		var ledge_bias: float = smoothstep(0.25, 0.95, segment_t1) * (0.45 + (ledge_strength * 0.55))
+		var hint_norm: float = clampf(
+			side_offset_hint / maxf(WorldGridProjection3DClass.TILE_WORLD_SIZE * 0.12, 0.001),
+			-1.0,
+			1.0
+		)
+
+		var target_offset: float = ((side_wave * 0.5) + (side_noise * 0.5) - 0.5) * silhouette_amp * 1.6
+		target_offset += silhouette_amp * ledge_bias * 0.42
+		target_offset += silhouette_amp * hint_norm * 0.38
+		target_offset -= silhouette_amp * foot_strength * smoothstep(0.75, 1.0, segment_t1) * 0.20
+		target_offset = lerpf(target_offset, 0.0, smoothstep(0.82, 1.0, segment_t1) * 0.65)
+		target_offset = clampf(target_offset, -silhouette_amp * 0.55, silhouette_amp * 1.05)
+
+		var segment_sample: Dictionary = cell_sample.duplicate(true)
+		segment_sample["cap"] = clampf(float(segment_sample.get("cap", 0.0)) * (0.35 - (segment_t1 * 0.20)), 0.0, 1.0)
+		segment_sample["cliff"] = clampf(maxf(float(segment_sample.get("cliff", 0.0)), 0.55 + (ledge_bias * 0.25)), 0.0, 1.0)
+		segment_sample["ledge"] = clampf((float(segment_sample.get("ledge", 0.0)) * 0.75) + (ledge_bias * 0.35), 0.0, 1.0)
+		segment_sample["foot"] = clampf(float(segment_sample.get("foot", 0.0)) + (smoothstep(0.70, 1.0, segment_t1) * 0.28), 0.0, 1.0)
+		segment_sample["ridge"] = clampf(float(segment_sample.get("ridge", 0.0)) + (absf(target_offset - prev_offset) * 2.8), 0.0, 1.0)
+
+		var segment_top_a: Vector3 = Vector3(top_a.x, y_top, top_a.z) + (outward * prev_offset)
+		var segment_top_b: Vector3 = Vector3(top_b.x, y_top, top_b.z) + (outward * prev_offset)
+		var segment_base_a: Vector3 = Vector3(top_a.x, y_bottom, top_a.z) + (outward * target_offset)
+		var segment_base_b: Vector3 = Vector3(top_b.x, y_bottom, top_b.z) + (outward * target_offset)
+
+		_add_cliff_face(
+			surface,
+			segment_top_a,
+			segment_sample,
+			segment_top_b,
+			segment_sample,
+			segment_base_a,
+			segment_base_b,
+			outward,
+			is_shore and segment_index <= 1
+		)
+		prev_offset = target_offset
 	return true
+
+func _side_offset_hint(corner_samples: Dictionary, corner_a: Vector2i, corner_b: Vector2i, outward: Vector3) -> float:
+	if corner_samples.is_empty():
+		return 0.0
+	var sample_a: Dictionary = _corner_sample(corner_samples, corner_a)
+	var sample_b: Dictionary = _corner_sample(corner_samples, corner_b)
+	var offset_a: Vector2 = Vector2(sample_a.get("offset", Vector2.ZERO))
+	var offset_b: Vector2 = Vector2(sample_b.get("offset", Vector2.ZERO))
+	var avg_offset: Vector2 = (offset_a + offset_b) * 0.5
+	var outward_2d: Vector2 = Vector2(outward.x, outward.z)
+	if outward_2d.length_squared() <= 0.00001:
+		return 0.0
+	return avg_offset.dot(outward_2d.normalized())
 
 func _vertex_color(sample: Dictionary) -> Color:
 	return Color(
