@@ -13,11 +13,11 @@ uniform vec4 talus_color : source_color = vec4(0.71, 0.72, 0.75, 1.0);
 uniform vec4 crack_color : source_color = vec4(0.45, 0.47, 0.51, 1.0);
 uniform vec3 light_direction = vec3(-0.58, 0.78, -0.22);
 uniform float triplanar_blend_sharpness : hint_range(1.0, 12.0) = 6.0;
-uniform float detail_uv_scale : hint_range(0.02, 1.5) = 0.12;
-uniform float detail_albedo_strength : hint_range(0.0, 1.0) = 0.34;
-uniform float detail_cavity_strength : hint_range(0.0, 1.0) = 0.20;
-uniform float detail_micro_shadow_strength : hint_range(0.0, 1.0) = 0.12;
-uniform float detail_roughness_strength : hint_range(0.0, 1.0) = 0.42;
+uniform float detail_uv_scale : hint_range(0.02, 1.5) = 0.045;
+uniform float detail_albedo_strength : hint_range(0.0, 1.0) = 0.06;
+uniform float detail_cavity_strength : hint_range(0.0, 1.0) = 0.03;
+uniform float detail_micro_shadow_strength : hint_range(0.0, 1.0) = 0.02;
+uniform float detail_roughness_strength : hint_range(0.0, 1.0) = 0.08;
 uniform float large_noise_scale : hint_range(0.01, 1.0) = 0.10;
 uniform float large_noise_strength : hint_range(0.0, 0.2) = 0.02;
 uniform float crack_scale : hint_range(0.05, 2.0) = 0.28;
@@ -111,12 +111,13 @@ void fragment() {
 	float detail_rough = triplanar_gray(detail_roughness_tex, world_position, world_normal, 1.0);
 	float detail_normal = triplanar_gray(detail_normal_tex, world_position + vec3(13.7, 5.3, 17.1), world_normal, 1.15);
 
-	float detail_mix = detail_albedo_strength * clamp(0.56 - (cliff_weight * 0.28), 0.20, 0.56);
+	float cliff_mask = smoothstep(0.35, 0.85, world_normal.y);
+	float detail_mix = detail_albedo_strength * cliff_mask;
 	vec3 detail_tint = mix(vec3(1.0), detail_color, detail_mix);
 	vec3 textured_albedo = albedo * detail_tint;
 
-	float cavity = pow(clamp(1.0 - detail_luma, 0.0, 1.0), 1.35) * detail_cavity_strength;
-	float micro_shadow = abs(detail_normal - 0.5) * 2.0 * detail_micro_shadow_strength;
+	float cavity = pow(clamp(1.0 - detail_luma, 0.0, 1.0), 1.35) * detail_cavity_strength * cliff_mask;
+	float micro_shadow = abs(detail_normal - 0.5) * 2.0 * detail_micro_shadow_strength * cliff_mask;
 	float crack_noise = noise2d((world_position.xz * crack_scale) + vec2(17.0, 9.0));
 	float crack_mask = smoothstep(0.72, 0.96, crack_noise + (cavity * 0.35)) * crack_strength * (0.25 + cliff_weight * 0.75);
 	textured_albedo = mix(textured_albedo, textured_albedo * crack_color.rgb, crack_mask * 0.38);
@@ -126,18 +127,18 @@ void fragment() {
 	float ramp_light = texture(light_ramp, vec2(clamp((NdotL * 0.5) + 0.5, 0.0, 1.0), 0.5)).r;
 	float soft_light = smoothstep(-0.08, 0.18, NdotL);
 	float light_mask = mix(soft_light, ramp_light, 0.55);
-	float cliff_light_dampen = mix(1.0, 0.62, cliff_weight);
+	float cliff_light_dampen = mix(1.0, 0.90, cliff_weight);
 	light_mask *= cliff_light_dampen;
 
 	// Свет и тень: сохраняем цвет поверхности даже в глубокой тени
-	vec3 shadow_tint = textured_albedo * shadow_color.rgb * (1.05 + cliff_weight * 0.20);
+	vec3 shadow_tint = textured_albedo * shadow_color.rgb * (1.0 + cliff_weight * 0.04);
 	vec3 lit_color = mix(shadow_tint, textured_albedo, light_mask);
 
 	// Запекаем AO (низ горы уходит в тень), но не убиваем читаемость
-	lit_color = mix(shadow_tint * 0.66, lit_color, height_ao * 0.84 + 0.16);
+	lit_color = mix(shadow_tint * 0.86, lit_color, height_ao * 0.84 + 0.16);
 
 	// Локальные микротени от детализации
-	float detail_occlusion = clamp(cavity + (micro_shadow * (0.35 + cliff_weight * 0.45)), 0.0, 0.42);
+	float detail_occlusion = clamp(cavity + (micro_shadow * (0.30 + cliff_weight * 0.30)), 0.0, 0.28);
 	lit_color *= 1.0 - detail_occlusion;
 
 	// 8. Подсветка граней (Edge Wear & Bounce Light)

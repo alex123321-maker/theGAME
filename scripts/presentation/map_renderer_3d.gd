@@ -5,9 +5,14 @@ const WorldGridProjection3DClass = preload("res://scripts/presentation/world_gri
 const MapDebugOverlayClass = preload("res://scripts/presentation/map_debug_overlay.gd")
 const MountainRegionBuilderClass = preload("res://scripts/presentation/mountain_region_builder.gd")
 const MountainSurfaceShader = preload("res://scripts/presentation/mountain_surface.gdshader")
-const MountainDetailAlbedoTexture = preload("res://assets/custom/ground_replacement_texture_pbr_20250901.png")
-const MountainDetailNormalTexture = preload("res://assets/custom/ground_replacement_texture_pbr_20250901_normal.png")
-const MountainDetailRoughnessTexture = preload("res://assets/custom/ground_replacement_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.png")
+const MountainRockDetailAlbedoPath: String = "res://assets/custom/rock_detail_albedo_tile.png"
+const MountainRockDetailNormalPath: String = "res://assets/custom/rock_detail_normal_tile.png"
+const MountainRockDetailRoughnessPath: String = "res://assets/custom/rock_detail_roughness_tile.png"
+const MountainDetailUVScale: float = 0.045
+const MountainDetailAlbedoStrength: float = 0.08
+const MountainDetailCavityStrength: float = 0.03
+const MountainDetailMicroShadowStrength: float = 0.02
+const MountainDetailRoughnessStrength: float = 0.10
 
 const TERRAIN_Y: float = 0.0
 const WATER_Y: float = -0.10
@@ -451,25 +456,51 @@ func _mountain_surface_material() -> ShaderMaterial:
 	_mountain_material.shader = MountainSurfaceShader
 	_mountain_material.set_shader_parameter("light_ramp", _mountain_ramp())
 	_mountain_material.set_shader_parameter("light_direction", _mountain_light_direction)
-	_mountain_material.set_shader_parameter("detail_albedo_tex", MountainDetailAlbedoTexture)
-	_mountain_material.set_shader_parameter("detail_normal_tex", MountainDetailNormalTexture)
-	_mountain_material.set_shader_parameter("detail_roughness_tex", MountainDetailRoughnessTexture)
-	_mountain_material.set_shader_parameter("detail_uv_scale", 0.10)
-	_mountain_material.set_shader_parameter("detail_albedo_strength", 0.30)
-	_mountain_material.set_shader_parameter("detail_cavity_strength", 0.16)
-	_mountain_material.set_shader_parameter("detail_micro_shadow_strength", 0.10)
-	_mountain_material.set_shader_parameter("detail_roughness_strength", 0.42)
+	var has_rock_detail: bool = _apply_mountain_detail_textures(_mountain_material)
+	_mountain_material.set_shader_parameter("detail_uv_scale", MountainDetailUVScale)
+	if has_rock_detail:
+		_mountain_material.set_shader_parameter("detail_albedo_strength", MountainDetailAlbedoStrength)
+		_mountain_material.set_shader_parameter("detail_cavity_strength", MountainDetailCavityStrength)
+		_mountain_material.set_shader_parameter("detail_micro_shadow_strength", MountainDetailMicroShadowStrength)
+		_mountain_material.set_shader_parameter("detail_roughness_strength", MountainDetailRoughnessStrength)
+	else:
+		# Safe fallback for the zebra artifact: disable detail if dedicated rock tiles are absent.
+		_mountain_material.set_shader_parameter("detail_albedo_strength", 0.0)
+		_mountain_material.set_shader_parameter("detail_cavity_strength", 0.0)
+		_mountain_material.set_shader_parameter("detail_micro_shadow_strength", 0.0)
+		_mountain_material.set_shader_parameter("detail_roughness_strength", 0.0)
 	return _mountain_material
+
+func _apply_mountain_detail_textures(material: ShaderMaterial) -> bool:
+	if not FileAccess.file_exists(MountainRockDetailAlbedoPath) \
+	or not FileAccess.file_exists(MountainRockDetailNormalPath) \
+	or not FileAccess.file_exists(MountainRockDetailRoughnessPath):
+		material.set_shader_parameter("detail_albedo_tex", null)
+		material.set_shader_parameter("detail_normal_tex", null)
+		material.set_shader_parameter("detail_roughness_tex", null)
+		return false
+	var albedo_tex: Texture2D = load(MountainRockDetailAlbedoPath) as Texture2D
+	var normal_tex: Texture2D = load(MountainRockDetailNormalPath) as Texture2D
+	var roughness_tex: Texture2D = load(MountainRockDetailRoughnessPath) as Texture2D
+	if albedo_tex == null or normal_tex == null or roughness_tex == null:
+		material.set_shader_parameter("detail_albedo_tex", null)
+		material.set_shader_parameter("detail_normal_tex", null)
+		material.set_shader_parameter("detail_roughness_tex", null)
+		return false
+	material.set_shader_parameter("detail_albedo_tex", albedo_tex)
+	material.set_shader_parameter("detail_normal_tex", normal_tex)
+	material.set_shader_parameter("detail_roughness_tex", roughness_tex)
+	return true
 
 func _mountain_ramp() -> GradientTexture1D:
 	if _mountain_ramp_texture != null:
 		return _mountain_ramp_texture
 	var gradient := Gradient.new()
-	gradient.add_point(0.0, Color(0.12, 0.12, 0.12, 1.0))
-	gradient.add_point(0.22, Color(0.28, 0.28, 0.28, 1.0))
+	gradient.add_point(0.0, Color(0.24, 0.24, 0.24, 1.0))
+	gradient.add_point(0.22, Color(0.38, 0.38, 0.38, 1.0))
 	gradient.add_point(0.50, Color(0.60, 0.60, 0.60, 1.0))
-	gradient.add_point(0.78, Color(0.86, 0.86, 0.86, 1.0))
-	gradient.add_point(1.0, Color(1.0, 1.0, 1.0, 1.0))
+	gradient.add_point(0.78, Color(0.78, 0.78, 0.78, 1.0))
+	gradient.add_point(1.0, Color(0.90, 0.90, 0.90, 1.0))
 	_mountain_ramp_texture = GradientTexture1D.new()
 	_mountain_ramp_texture.gradient = gradient
 	_mountain_ramp_texture.width = 8

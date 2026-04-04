@@ -194,6 +194,8 @@ func build_mesh(profile: Dictionary):
 
 	if not has_geometry:
 		return null
+	surface.index()
+	surface.generate_normals()
 	return surface.commit()
 
 func _is_mountain_tile(tile, rock_region_labels: Dictionary) -> bool:
@@ -1263,46 +1265,8 @@ func _add_quad(
 	d: Vector3,
 	d_color: Color
 ) -> void:
-	var quad_normal: Vector3 = (b - a).cross(d - a)
-	if quad_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
-		quad_normal = (b - a).cross(c - a)
-	if quad_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
-		quad_normal = (c - a).cross(d - a)
-	if quad_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
-		return
-	quad_normal = quad_normal.normalized()
-	_add_triangle_with_normal(surface, a, a_color, b, b_color, c, c_color, quad_normal)
-	_add_triangle_with_normal(surface, a, a_color, c, c_color, d, d_color, quad_normal)
-
-func _add_triangle_with_normal(
-	surface: SurfaceTool,
-	a: Vector3,
-	a_color: Color,
-	b: Vector3,
-	b_color: Color,
-	c: Vector3,
-	c_color: Color,
-	normal: Vector3
-) -> void:
-	if (b - a).cross(c - a).length_squared() <= MIN_TRIANGLE_AREA_SQ:
-		return
-	var safe_normal: Vector3 = normal
-	if safe_normal.length_squared() <= 0.000001:
-		safe_normal = (b - a).cross(c - a)
-		if safe_normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
-			return
-		safe_normal = safe_normal.normalized()
-	else:
-		safe_normal = safe_normal.normalized()
-	surface.set_normal(safe_normal)
-	surface.set_color(a_color)
-	surface.add_vertex(a)
-	surface.set_normal(safe_normal)
-	surface.set_color(b_color)
-	surface.add_vertex(b)
-	surface.set_normal(safe_normal)
-	surface.set_color(c_color)
-	surface.add_vertex(c)
+	_add_triangle(surface, a, a_color, b, b_color, c, c_color)
+	_add_triangle(surface, a, a_color, c, c_color, d, d_color)
 
 func _add_triangle(
 	surface: SurfaceTool,
@@ -1313,17 +1277,13 @@ func _add_triangle(
 	c: Vector3,
 	c_color: Color
 ) -> void:
-	var normal: Vector3 = (b - a).cross(c - a)
-	if normal.length_squared() <= MIN_TRIANGLE_AREA_SQ:
+	if (b - a).cross(c - a).length_squared() <= MIN_TRIANGLE_AREA_SQ:
 		return
-	normal = normal.normalized()
-	surface.set_normal(normal)
+	surface.set_smooth_group(0)
 	surface.set_color(a_color)
 	surface.add_vertex(a)
-	surface.set_normal(normal)
 	surface.set_color(b_color)
 	surface.add_vertex(b)
-	surface.set_normal(normal)
 	surface.set_color(c_color)
 	surface.add_vertex(c)
 
