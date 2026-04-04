@@ -6,12 +6,12 @@ const GenerationUtilsClass = preload("res://scripts/core/generation/generation_u
 
 const MIN_VISIBLE_HEIGHT: float = 0.04
 const PEAK_HEIGHT_SCALE: float = 1.22
-const CLIFF_VERTICAL_SEGMENTS: int = 8
-const CLIFF_HORIZONTAL_SEGMENTS: int = 6
-const CLIFF_LEDGE_DEPTH: float = 1.15
-const CLIFF_BREAKUP_STRENGTH: float = 0.85
+const CLIFF_VERTICAL_SEGMENTS: int = 6
+const CLIFF_HORIZONTAL_SEGMENTS: int = 4
+const CLIFF_LEDGE_DEPTH: float = 1.45
+const CLIFF_BREAKUP_STRENGTH: float = 1.20
 const SHORE_TOP_FLARE_DEPTH: float = 0.95
-const MIN_GEOMETRY_PUSH_DELTA: float = 0.03
+const MIN_GEOMETRY_PUSH_DELTA: float = 0.05
 const MIN_TRIANGLE_AREA_SQ: float = 0.0000005
 const TOP_BLOCK_PUSH_MULTIPLIER: float = 0.30
 const HEIGHT_STEP: float = 0.50
@@ -985,50 +985,74 @@ func _add_side_cliff_if_needed(
 		return false
 	var is_shore: bool = is_boundary and bool(shore_sides.get(_cell_side_key(cell, side_name), false))
 
-	var segment_count: int = clampi(int(ceili(drop / HEIGHT_STEP)), 1, 4)
-	var segment_height: float = drop / float(segment_count)
+	var segment_count: int = clampi(int(ceili(drop / (HEIGHT_STEP * 1.55))), 1, 3)
+	if is_shore and drop > HEIGHT_STEP * 2.6:
+		segment_count = maxi(segment_count, 2)
+	var split_points: Array = [0.0]
+	var prev_split: float = 0.0
+	for split_index in range(1, segment_count):
+		var base_t: float = float(split_index) / float(segment_count)
+		var split_noise: float = _noise_01(
+			cell.x + int(outward.x * 29.0) + (split_index * 19),
+			cell.y + int(outward.z * 29.0) - (split_index * 13),
+			1447 + (23 if is_shore else 0)
+		)
+		var jitter: float = (split_noise - 0.5) * 0.34
+		var split_t: float = clampf(base_t + jitter, prev_split + 0.14, 0.92)
+		split_points.append(split_t)
+		prev_split = split_t
+	split_points.append(1.0)
 	var cliff_strength: float = clampf(float(cell_sample.get("cliff", 0.0)), 0.0, 1.0)
 	var ledge_strength: float = clampf(float(cell_sample.get("ledge", 0.0)), 0.0, 1.0)
 	var foot_strength: float = clampf(float(cell_sample.get("foot", 0.0)), 0.0, 1.0)
-	var silhouette_amp: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * (0.04 + (cliff_strength * 0.06) + (ledge_strength * 0.03))
+	var silhouette_amp: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * (0.10 + (cliff_strength * 0.12) + (ledge_strength * 0.08))
 	if not is_boundary:
-		silhouette_amp *= 0.82
+		silhouette_amp *= 0.88
 	if is_shore:
-		silhouette_amp *= 1.12
+		silhouette_amp *= 1.18
 
 	var prev_offset: float = 0.0
 	for segment_index in range(segment_count):
-		var segment_t0: float = float(segment_index) / float(segment_count)
-		var segment_t1: float = float(segment_index + 1) / float(segment_count)
+		var segment_t0: float = float(split_points[segment_index])
+		var segment_t1: float = float(split_points[segment_index + 1])
 		var y_top: float = top_height - (drop * segment_t0)
 		var y_bottom: float = top_height - (drop * segment_t1)
 
-		var side_wave: float = sin((float(cell.x * 3 + cell.y * 5) * 0.31) + (float(segment_index) * 1.41)) * 0.5 + 0.5
-		var side_noise: float = _noise_01(
-			cell.x + int(outward.x * 17.0) + (segment_index * 11),
-			cell.y + int(outward.z * 17.0) - (segment_index * 7),
-			733 + (17 if is_shore else 0)
+		var side_macro: float = _noise_01(
+			cell.x + int(outward.x * 41.0) + (segment_index * 31),
+			cell.y + int(outward.z * 41.0) - (segment_index * 29),
+			2003 + (37 if is_shore else 0)
 		)
-		var ledge_bias: float = smoothstep(0.25, 0.95, segment_t1) * (0.45 + (ledge_strength * 0.55))
+		var side_breakup: float = _noise_01(
+			cell.x + int(outward.x * 67.0) - (segment_index * 17),
+			cell.y + int(outward.z * 67.0) + (segment_index * 23),
+			2531
+		)
+		var macro_signed: float = (side_macro * 2.0) - 1.0
+		var breakup_signed: float = (side_breakup * 2.0) - 1.0
+		var ledge_bias: float = smoothstep(0.18, 0.92, segment_t1) * (0.40 + (ledge_strength * 0.60))
+		var segment_span: float = maxf(0.08, segment_t1 - segment_t0)
 		var hint_norm: float = clampf(
 			side_offset_hint / maxf(WorldGridProjection3DClass.TILE_WORLD_SIZE * 0.12, 0.001),
 			-1.0,
 			1.0
 		)
 
-		var target_offset: float = ((side_wave * 0.5) + (side_noise * 0.5) - 0.5) * silhouette_amp * 1.6
-		target_offset += silhouette_amp * ledge_bias * 0.42
-		target_offset += silhouette_amp * hint_norm * 0.38
+		var target_offset: float = macro_signed * silhouette_amp * (0.62 + (segment_span * 0.55))
+		target_offset += breakup_signed * silhouette_amp * 0.45
+		target_offset += silhouette_amp * ledge_bias * 0.52
+		target_offset += silhouette_amp * hint_norm * 0.58
 		target_offset -= silhouette_amp * foot_strength * smoothstep(0.75, 1.0, segment_t1) * 0.20
-		target_offset = lerpf(target_offset, 0.0, smoothstep(0.82, 1.0, segment_t1) * 0.65)
-		target_offset = clampf(target_offset, -silhouette_amp * 0.55, silhouette_amp * 1.05)
+		if segment_index == segment_count - 1:
+			target_offset = lerpf(target_offset, 0.0, 0.24)
+		target_offset = clampf(target_offset, -silhouette_amp * 0.65, silhouette_amp * 1.50)
 
 		var segment_sample: Dictionary = cell_sample.duplicate(true)
 		segment_sample["cap"] = clampf(float(segment_sample.get("cap", 0.0)) * (0.35 - (segment_t1 * 0.20)), 0.0, 1.0)
-		segment_sample["cliff"] = clampf(maxf(float(segment_sample.get("cliff", 0.0)), 0.55 + (ledge_bias * 0.25)), 0.0, 1.0)
-		segment_sample["ledge"] = clampf((float(segment_sample.get("ledge", 0.0)) * 0.75) + (ledge_bias * 0.35), 0.0, 1.0)
+		segment_sample["cliff"] = clampf(maxf(float(segment_sample.get("cliff", 0.0)), 0.58 + (ledge_bias * 0.22)), 0.0, 1.0)
+		segment_sample["ledge"] = clampf((float(segment_sample.get("ledge", 0.0)) * 0.72) + (ledge_bias * 0.45), 0.0, 1.0)
 		segment_sample["foot"] = clampf(float(segment_sample.get("foot", 0.0)) + (smoothstep(0.70, 1.0, segment_t1) * 0.28), 0.0, 1.0)
-		segment_sample["ridge"] = clampf(float(segment_sample.get("ridge", 0.0)) + (absf(target_offset - prev_offset) * 2.8), 0.0, 1.0)
+		segment_sample["ridge"] = clampf(float(segment_sample.get("ridge", 0.0)) + (absf(target_offset - prev_offset) * 2.1), 0.0, 1.0)
 
 		var segment_top_a: Vector3 = Vector3(top_a.x, y_top, top_a.z) + (outward * prev_offset)
 		var segment_top_b: Vector3 = Vector3(top_b.x, y_top, top_b.z) + (outward * prev_offset)
@@ -1044,7 +1068,7 @@ func _add_side_cliff_if_needed(
 			segment_base_a,
 			segment_base_b,
 			outward,
-			is_shore and segment_index <= 1
+			is_shore and segment_index == 0
 		)
 		prev_offset = target_offset
 	return true
@@ -1127,38 +1151,47 @@ func _cliff_face_block_data(
 	var seam_lock_bottom: float = 1.0 - smoothstep(0.84, 0.98, v)
 	var seam_lock: float = seam_lock_top * seam_lock_bottom
 	
-	var ledge_steps: float = 4.0 + floor((avg_cliff * 4.0) + (avg_ledge * 3.0))
-	var step_phase: float = (v * ledge_steps) + (phase * 0.3)
-	var blocky_v: float = floor(step_phase) / ledge_steps
-	var step_local: float = step_phase - floor(step_phase)
-	var step_mask: float = smoothstep(0.0, 0.15, step_local) * (1.0 - smoothstep(0.75, 1.0, step_local))
-	
-	var vertical_bands: float = 3.0 + (avg_cliff * 3.0)
-	var blocky_u: float = floor(u * vertical_bands + phase * 2.0)
-	var ledge_wave: float = sin(blocky_v * 13.0 + blocky_u * 7.0 + phase * TAU) * 0.5 + 0.5
-	var ledge_mask: float = maxf(
-		pow(ledge_wave, 1.5),
-		step_mask * (0.6 + (avg_ledge * 0.4))
+	var ledge_steps: float = 2.0 + floor((avg_cliff * 2.0) + (avg_ledge * 2.0))
+	var coarse_u: int = int(floor(u * 3.0))
+	var coarse_v: int = int(floor(v * ledge_steps))
+	var feature_seed: int = int(roundi(phase * 997.0))
+	var ledge_noise: float = _noise_01(
+		coarse_u + int(roundi(top_pos.x * 0.65)),
+		coarse_v + int(roundi(top_pos.z * 0.65)),
+		901 + feature_seed
 	)
-	var breakup_wave: float = sin(blocky_u * 4.0 + blocky_v * 5.0 + phase * TAU) * 0.5 + 0.5
+	var breakup_noise: float = _noise_01(
+		(coarse_u * 5) + int(roundi(top_pos.z * 0.47)),
+		(coarse_v * 7) + int(roundi(top_pos.x * 0.47)),
+		1213 + feature_seed
+	)
+	var step_phase: float = (v * ledge_steps) + (ledge_noise * 0.75)
+	var step_local: float = step_phase - floor(step_phase)
+	var step_mask: float = smoothstep(0.0, 0.12, step_local) * (1.0 - smoothstep(0.68, 1.0, step_local))
+
+	var ledge_mask: float = maxf(
+		pow(ledge_noise, 0.82),
+		step_mask * (0.58 + (avg_ledge * 0.42))
+	)
 	
 	var ledge_push: float = CLIFF_LEDGE_DEPTH
-	ledge_push *= 0.5 + (avg_cliff * 0.5)
-	ledge_push *= 0.6 + (avg_ledge * 0.4)
+	ledge_push *= 0.52 + (avg_cliff * 0.48)
+	ledge_push *= 0.58 + (avg_ledge * 0.42)
 	ledge_push *= ledge_mask * edge_fade
-	ledge_push *= 0.6 + (breakup_wave * CLIFF_BREAKUP_STRENGTH)
+	ledge_push *= 0.52 + (breakup_noise * CLIFF_BREAKUP_STRENGTH)
+	ledge_push *= 0.78 + (pow(ledge_noise, 1.25) * 0.7)
 	
 	var shore_flare: float = 0.0
 	if is_shore:
 		var upper_band: float = 1.0 - smoothstep(0.05, 0.45, v)
 		var overhang: float = smoothstep(0.0, 0.1, v)
-		var top_blockiness: float = 0.7 + (sin(blocky_u * 3.0 + phase * 4.0) * 0.5 + 0.5) * 0.3
+		var top_blockiness: float = 0.75 + (breakup_noise * 0.35)
 		shore_flare = SHORE_TOP_FLARE_DEPTH
 		shore_flare *= upper_band * overhang * edge_fade * top_blockiness
 		shore_flare *= clampf((avg_cliff * 0.8) + 0.4, 0.4, 1.0)
 	
-	var max_push: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * (0.36 if is_shore else 0.24)
-	var push_scale: float = 0.62 if is_shore else 0.52
+	var max_push: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * (0.44 if is_shore else 0.34)
+	var push_scale: float = 0.74 if is_shore else 0.66
 	var push_amount: float = clampf((ledge_push + shore_flare) * height_scale * seam_lock * push_scale, 0.0, max_push)
 	
 	var side_sample: Dictionary = _sample_lerp(top_a_sample, top_b_sample, u)
