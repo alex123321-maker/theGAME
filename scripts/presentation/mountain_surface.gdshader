@@ -79,8 +79,10 @@ void fragment() {
 	vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	vec3 light_dir = normalize(light_direction);
 
-	// 1. Изолируем верхние грани (плато) от вертикальных скал по нормали
-	float is_top = smoothstep(0.4, 0.7, world_normal.y);
+	// 1. Изолируем верхние грани (плато) от вертикальных скал по данным меша, а не по сглаженной нормали
+	float cap_mask = clamp(vertex_mask.r, 0.0, 1.0);
+	float cliff_data = clamp(vertex_mask.g, 0.0, 1.0);
+	float is_top = smoothstep(0.55, 0.85, cap_mask) * (1.0 - smoothstep(0.25, 0.55, cliff_data));
 
 	// 2. Глубина (Fake Ambient Occlusion) - у подножия горы темнее, макушки светлее
 	float height_ao = smoothstep(-1.0, 8.0, local_position.y);
@@ -111,13 +113,13 @@ void fragment() {
 	float detail_rough = triplanar_gray(detail_roughness_tex, world_position, world_normal, 1.0);
 	float detail_normal = triplanar_gray(detail_normal_tex, world_position + vec3(13.7, 5.3, 17.1), world_normal, 1.15);
 
-	float cliff_mask = smoothstep(0.35, 0.85, world_normal.y);
-	float detail_mix = detail_albedo_strength * cliff_mask;
+	float detail_cap_mask = smoothstep(0.35, 0.85, is_top);
+	float detail_mix = detail_albedo_strength * detail_cap_mask;
 	vec3 detail_tint = mix(vec3(1.0), detail_color, detail_mix);
 	vec3 textured_albedo = albedo * detail_tint;
 
-	float cavity = pow(clamp(1.0 - detail_luma, 0.0, 1.0), 1.35) * detail_cavity_strength * cliff_mask;
-	float micro_shadow = abs(detail_normal - 0.5) * 2.0 * detail_micro_shadow_strength * cliff_mask;
+	float cavity = pow(clamp(1.0 - detail_luma, 0.0, 1.0), 1.35) * detail_cavity_strength * detail_cap_mask;
+	float micro_shadow = abs(detail_normal - 0.5) * 2.0 * detail_micro_shadow_strength * detail_cap_mask;
 	float crack_noise = noise2d((world_position.xz * crack_scale) + vec2(17.0, 9.0));
 	float crack_mask = smoothstep(0.72, 0.96, crack_noise + (cavity * 0.35)) * crack_strength * (0.25 + cliff_weight * 0.75);
 	textured_albedo = mix(textured_albedo, textured_albedo * crack_color.rgb, crack_mask * 0.38);

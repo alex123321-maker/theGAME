@@ -14,6 +14,7 @@ const SHORE_TOP_FLARE_DEPTH: float = 0.95
 const MIN_GEOMETRY_PUSH_DELTA: float = 0.03
 const MIN_TRIANGLE_AREA_SQ: float = 0.0000005
 const TOP_BLOCK_PUSH_MULTIPLIER: float = 0.30
+const HEIGHT_STEP: float = 0.50
 const SMOOTH_GROUP_TOP: int = 0
 const SMOOTH_GROUP_CLIFF: int = 1
 
@@ -99,9 +100,10 @@ func build_profiles(map_data: MapData) -> Array[Dictionary]:
 func build_mesh(profile: Dictionary):
 	var cells: Array = profile.get("cells", [])
 	var cell_set: Dictionary = profile.get("cell_set", {})
-	var corner_samples: Dictionary = profile.get("corner_samples", {})
+	var stepped_height_map: Dictionary = profile.get("stepped_height_map", profile.get("height_map", {}))
+	var zone_map: Dictionary = profile.get("zone_map", {})
 	var shore_sides: Dictionary = profile.get("shore_sides", {})
-	if cells.is_empty() or corner_samples.is_empty():
+	if cells.is_empty() or stepped_height_map.is_empty() or zone_map.is_empty():
 		return null
 
 	var surface := SurfaceTool.new()
@@ -110,88 +112,82 @@ func build_mesh(profile: Dictionary):
 
 	for raw_cell in cells:
 		var cell: Vector2i = raw_cell
+		var cell_height: float = float(stepped_height_map.get(cell, 0.0))
+		if cell_height <= MIN_VISIBLE_HEIGHT:
+			continue
+		var cell_sample: Dictionary = _cell_mesh_sample(zone_map, cell, cell_height)
+
 		var nw_corner := Vector2i(cell.x, cell.y)
 		var ne_corner := Vector2i(cell.x + 1, cell.y)
 		var se_corner := Vector2i(cell.x + 1, cell.y + 1)
 		var sw_corner := Vector2i(cell.x, cell.y + 1)
 
-		var nw_sample: Dictionary = _corner_sample(corner_samples, nw_corner)
-		var ne_sample: Dictionary = _corner_sample(corner_samples, ne_corner)
-		var se_sample: Dictionary = _corner_sample(corner_samples, se_corner)
-		var sw_sample: Dictionary = _corner_sample(corner_samples, sw_corner)
+		var nw: Vector3 = _grid_corner_world(nw_corner, cell_height)
+		var ne: Vector3 = _grid_corner_world(ne_corner, cell_height)
+		var se: Vector3 = _grid_corner_world(se_corner, cell_height)
+		var sw: Vector3 = _grid_corner_world(sw_corner, cell_height)
 
-		var nw: Vector3 = _corner_world(nw_corner, nw_sample)
-		var ne: Vector3 = _corner_world(ne_corner, ne_sample)
-		var se: Vector3 = _corner_world(se_corner, se_sample)
-		var sw: Vector3 = _corner_world(sw_corner, sw_sample)
+		_add_flat_top_face(surface, nw, sw, se, ne, cell_sample)
+		has_geometry = true
 
-		if maxf(maxf(nw.y, ne.y), maxf(se.y, sw.y)) > MIN_VISIBLE_HEIGHT:
-			_add_blocky_top_face(
-				surface,
-				nw, nw_sample,
-				sw, sw_sample,
-				se, se_sample,
-				ne, ne_sample,
-				float(cell.x + cell.y * 12.3)
-			)
+		if _add_side_cliff_if_needed(
+			surface,
+			cell,
+			Vector2i(cell.x, cell.y - 1),
+			"north",
+			cell_set,
+			stepped_height_map,
+			cell_sample,
+			nw,
+			ne,
+			Vector3(0.0, 0.0, -1.0),
+			shore_sides
+		):
 			has_geometry = true
 
-		var ground_nw: Vector3 = _ground_world(nw_corner, nw_sample)
-		var ground_ne: Vector3 = _ground_world(ne_corner, ne_sample)
-		var ground_se: Vector3 = _ground_world(se_corner, se_sample)
-		var ground_sw: Vector3 = _ground_world(sw_corner, sw_sample)
+		if _add_side_cliff_if_needed(
+			surface,
+			cell,
+			Vector2i(cell.x + 1, cell.y),
+			"east",
+			cell_set,
+			stepped_height_map,
+			cell_sample,
+			ne,
+			se,
+			Vector3(1.0, 0.0, 0.0),
+			shore_sides
+		):
+			has_geometry = true
 
-		if not cell_set.has(Vector2i(cell.x, cell.y - 1)) and maxf(nw.y, ne.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(
-				surface,
-				nw,
-				nw_sample,
-				ne,
-				ne_sample,
-				ground_nw,
-				ground_ne,
-				Vector3(0.0, 0.0, -1.0),
-				bool(shore_sides.get(_cell_side_key(cell, "north"), false))
-			)
+		if _add_side_cliff_if_needed(
+			surface,
+			cell,
+			Vector2i(cell.x, cell.y + 1),
+			"south",
+			cell_set,
+			stepped_height_map,
+			cell_sample,
+			se,
+			sw,
+			Vector3(0.0, 0.0, 1.0),
+			shore_sides
+		):
 			has_geometry = true
-		if not cell_set.has(Vector2i(cell.x + 1, cell.y)) and maxf(ne.y, se.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(
-				surface,
-				ne,
-				ne_sample,
-				se,
-				se_sample,
-				ground_ne,
-				ground_se,
-				Vector3(1.0, 0.0, 0.0),
-				bool(shore_sides.get(_cell_side_key(cell, "east"), false))
-			)
-			has_geometry = true
-		if not cell_set.has(Vector2i(cell.x, cell.y + 1)) and maxf(se.y, sw.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(
-				surface,
-				se,
-				se_sample,
-				sw,
-				sw_sample,
-				ground_se,
-				ground_sw,
-				Vector3(0.0, 0.0, 1.0),
-				bool(shore_sides.get(_cell_side_key(cell, "south"), false))
-			)
-			has_geometry = true
-		if not cell_set.has(Vector2i(cell.x - 1, cell.y)) and maxf(sw.y, nw.y) > MIN_VISIBLE_HEIGHT:
-			_add_cliff_face(
-				surface,
-				sw,
-				sw_sample,
-				nw,
-				nw_sample,
-				ground_sw,
-				ground_nw,
-				Vector3(-1.0, 0.0, 0.0),
-				bool(shore_sides.get(_cell_side_key(cell, "west"), false))
-			)
+
+		if _add_side_cliff_if_needed(
+			surface,
+			cell,
+			Vector2i(cell.x - 1, cell.y),
+			"west",
+			cell_set,
+			stepped_height_map,
+			cell_sample,
+			sw,
+			nw,
+			Vector3(-1.0, 0.0, 0.0),
+			shore_sides
+		):
 			has_geometry = true
 
 	if not has_geometry:
@@ -297,6 +293,11 @@ func _finalize_profile(profile: Dictionary, map_data: MapData) -> void:
 		var relief: float = _local_relief(cell, height_map, cell_set, peak_height)
 		zone_map[cell] = _build_zone_sample(context, relief, profile_type, summit_profile, type_config, edge_set.has(cell))
 
+	var stepped_height_map: Dictionary = {}
+	for raw_cell in cells:
+		var cell: Vector2i = raw_cell
+		stepped_height_map[cell] = _snap_height(float(height_map.get(cell, 0.0)))
+
 	profile["center"] = center
 	profile["boundary_cells"] = boundary_cells
 	profile["distance_map"] = distance_map
@@ -308,6 +309,7 @@ func _finalize_profile(profile: Dictionary, map_data: MapData) -> void:
 	profile["branches"] = branches
 	profile["peak_height"] = peak_height
 	profile["height_map"] = height_map
+	profile["stepped_height_map"] = stepped_height_map
 	profile["zone_map"] = zone_map
 	profile["shore_sides"] = _build_shore_side_map(cells, cell_set, map_data)
 	profile["corner_samples"] = _build_corner_samples(profile)
@@ -918,6 +920,69 @@ func _ground_world(corner: Vector2i, sample: Dictionary) -> Vector3:
 		(float(corner.y) * WorldGridProjection3DClass.TILE_WORLD_SIZE) - half_tile + offset.y
 	)
 
+func _cell_mesh_sample(zone_map: Dictionary, cell: Vector2i, height_value: float) -> Dictionary:
+	var zone: Dictionary = zone_map.get(cell, {})
+	return {
+		"height": height_value,
+		"cap": clampf(float(zone.get("cap", 0.0)), 0.0, 1.0),
+		"cliff": clampf(float(zone.get("cliff", 0.0)), 0.0, 1.0),
+		"foot": clampf(float(zone.get("foot", 0.0)), 0.0, 1.0),
+		"ridge": clampf(float(zone.get("ridge", 0.0)), 0.0, 1.0),
+		"ledge": clampf(float(zone.get("ledge", 0.0)), 0.0, 1.0),
+		"offset": Vector2.ZERO,
+	}
+
+func _grid_corner_world(corner: Vector2i, y_value: float) -> Vector3:
+	var half_tile: float = WorldGridProjection3DClass.TILE_WORLD_SIZE * 0.5
+	return Vector3(
+		(float(corner.x) * WorldGridProjection3DClass.TILE_WORLD_SIZE) - half_tile,
+		y_value,
+		(float(corner.y) * WorldGridProjection3DClass.TILE_WORLD_SIZE) - half_tile
+	)
+
+func _add_flat_top_face(
+	surface: SurfaceTool,
+	nw: Vector3,
+	sw: Vector3,
+	se: Vector3,
+	ne: Vector3,
+	sample: Dictionary
+) -> void:
+	var top_sample: Dictionary = sample.duplicate(true)
+	top_sample["cap"] = maxf(float(top_sample.get("cap", 0.0)), 0.92)
+	top_sample["cliff"] = minf(float(top_sample.get("cliff", 0.0)) * 0.18, 0.22)
+	var top_color: Color = _vertex_color(top_sample)
+	_add_quad(surface, nw, top_color, sw, top_color, se, top_color, ne, top_color, SMOOTH_GROUP_TOP)
+
+func _add_side_cliff_if_needed(
+	surface: SurfaceTool,
+	cell: Vector2i,
+	neighbor: Vector2i,
+	side_name: String,
+	cell_set: Dictionary,
+	height_map: Dictionary,
+	cell_sample: Dictionary,
+	top_a: Vector3,
+	top_b: Vector3,
+	outward: Vector3,
+	shore_sides: Dictionary
+) -> bool:
+	var top_height: float = top_a.y
+	var is_boundary: bool = not cell_set.has(neighbor)
+	var base_height: float = 0.0
+	if not is_boundary:
+		base_height = float(height_map.get(neighbor, 0.0))
+		if top_height <= base_height + MIN_VISIBLE_HEIGHT:
+			return false
+	if top_height - base_height <= MIN_VISIBLE_HEIGHT:
+		return false
+
+	var base_a: Vector3 = Vector3(top_a.x, base_height, top_a.z)
+	var base_b: Vector3 = Vector3(top_b.x, base_height, top_b.z)
+	var is_shore: bool = is_boundary and bool(shore_sides.get(_cell_side_key(cell, side_name), false))
+	_add_cliff_face(surface, top_a, cell_sample, top_b, cell_sample, base_a, base_b, outward, is_shore)
+	return true
+
 func _vertex_color(sample: Dictionary) -> Color:
 	return Color(
 		clampf(float(sample.get("cap", 0.0)), 0.0, 1.0),
@@ -1352,6 +1417,14 @@ func _distance_to_segment_2d(point: Vector2, from_point: Vector2, to_point: Vect
 		return point.distance_to(from_point)
 	var t: float = clampf((point - from_point).dot(segment) / length_squared, 0.0, 1.0)
 	return point.distance_to(from_point + (segment * t))
+
+func _snap_height(value: float) -> float:
+	if value <= MIN_VISIBLE_HEIGHT:
+		return 0.0
+	var snapped: float = roundf(value / HEIGHT_STEP) * HEIGHT_STEP
+	if snapped < HEIGHT_STEP:
+		snapped = HEIGHT_STEP
+	return snapped
 
 func _noise_01(x: int, y: int, salt: int) -> float:
 	var value: int = GenerationUtilsClass.hash2d(x, y, salt) % 1000
