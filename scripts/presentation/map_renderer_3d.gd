@@ -3,6 +3,8 @@ class_name MapRenderer3D
 
 const WorldGridProjection3DClass = preload("res://scripts/presentation/world_grid_projection_3d.gd")
 const MapDebugOverlayClass = preload("res://scripts/presentation/map_debug_overlay.gd")
+const MountainRegionBuilderClass = preload("res://scripts/presentation/mountain_region_builder.gd")
+const MountainSurfaceShader = preload("res://scripts/presentation/mountain_surface.gdshader")
 
 const TERRAIN_Y: float = 0.0
 const WATER_Y: float = -0.10
@@ -23,6 +25,7 @@ var _road_root: Node3D
 var _water_root: Node3D
 var _boundary_root: Node3D
 var _blocker_root: Node3D
+var _mountain_root: Node3D
 var _transition_root: Node3D
 var _decor_root: Node3D
 var _grid_root: Node3D
@@ -36,6 +39,9 @@ var _strip_mesh: BoxMesh
 var _block_mesh: BoxMesh
 var _decor_mesh: CylinderMesh
 var _material_cache: Dictionary = {}
+var _mountain_builder := MountainRegionBuilderClass.new()
+var _mountain_material: ShaderMaterial
+var _mountain_ramp_texture: GradientTexture1D
 
 func _ready() -> void:
 	_surface_root = _ensure_layer("SurfaceRoot")
@@ -43,6 +49,7 @@ func _ready() -> void:
 	_water_root = _ensure_layer("WaterRoot")
 	_boundary_root = _ensure_layer("BoundaryRoot")
 	_blocker_root = _ensure_layer("BlockerRoot")
+	_mountain_root = _ensure_layer("MountainRoot")
 	_transition_root = _ensure_layer("TransitionRoot")
 	_decor_root = _ensure_layer("DecorRoot")
 	_grid_root = _ensure_layer("GridRoot")
@@ -103,12 +110,14 @@ func _rebuild() -> void:
 	_clear_children(_water_root)
 	_clear_children(_boundary_root)
 	_clear_children(_blocker_root)
+	_clear_children(_mountain_root)
 	_clear_children(_transition_root)
 	_clear_children(_decor_root)
 	_clear_children(_grid_root)
 	_build_surface_layer()
 	_build_road_layer()
 	_build_water_layer()
+	_build_mountain_layer()
 	_build_blocker_layer()
 	_build_transition_layer()
 	_build_decor_layer()
@@ -162,6 +171,8 @@ func _build_blocker_layer() -> void:
 	for tile in map_data.tiles:
 		if not tile.is_blocked or tile.is_road:
 			continue
+		if tile.blocker_type == MapTypes.BlockerType.ROCK:
+			continue
 		var mesh_instance := MeshInstance3D.new()
 		mesh_instance.mesh = _block_mesh
 		mesh_instance.material_override = _material(
@@ -172,6 +183,22 @@ func _build_blocker_layer() -> void:
 		mesh_instance.position = WorldGridProjection3DClass.logical_to_world(Vector2i(tile.x, tile.y), BLOCKER_Y)
 		mesh_instance.scale = Vector3.ONE * _blocker_scale(tile.blocker_type)
 		_blocker_root.add_child(mesh_instance)
+
+func _build_mountain_layer() -> void:
+	var profiles: Array[Dictionary] = _mountain_builder.build_profiles(map_data)
+	if profiles.is_empty():
+		return
+	var material := _mountain_surface_material()
+	for profile in profiles:
+		var region_mesh = _mountain_builder.build_mesh(profile)
+		if region_mesh == null:
+			continue
+		var mesh_instance := MeshInstance3D.new()
+		mesh_instance.name = "Mountain_%d" % int(profile.get("id", 0))
+		mesh_instance.mesh = region_mesh
+		mesh_instance.material_override = material
+		mesh_instance.position.y = TERRAIN_Y
+		_mountain_root.add_child(mesh_instance)
 
 func _build_transition_layer() -> void:
 	for tile in map_data.tiles:
@@ -194,6 +221,8 @@ func _build_decor_layer() -> void:
 		return
 	for tile in map_data.tiles:
 		if tile.is_road or tile.is_water or tile.is_blocked:
+			continue
+		if tile.region_type == MapTypes.RegionType.BLOCKER_MASS and (tile.debug_tags.has("rock_edge") or tile.debug_tags.has("rock_core")):
 			continue
 		if tile.base_terrain_type == MapTypes.TerrainType.CLEARING:
 			continue
@@ -399,6 +428,28 @@ func _material(key: String, color: Color, roughness: float) -> StandardMaterial3
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_material_cache[key] = material
 	return material
+
+func _mountain_surface_material() -> ShaderMaterial:
+	if _mountain_material != null:
+		return _mountain_material
+	_mountain_material = ShaderMaterial.new()
+	_mountain_material.shader = MountainSurfaceShader
+	_mountain_material.set_shader_parameter("light_ramp", _mountain_ramp())
+	return _mountain_material
+
+func _mountain_ramp() -> GradientTexture1D:
+	if _mountain_ramp_texture != null:
+		return _mountain_ramp_texture
+	var gradient := Gradient.new()
+	gradient.add_point(0.0, Color(0.18, 0.18, 0.18, 1.0))
+	gradient.add_point(0.24, Color(0.34, 0.34, 0.34, 1.0))
+	gradient.add_point(0.48, Color(0.58, 0.58, 0.58, 1.0))
+	gradient.add_point(0.76, Color(0.82, 0.82, 0.82, 1.0))
+	gradient.add_point(1.0, Color(1.0, 1.0, 1.0, 1.0))
+	_mountain_ramp_texture = GradientTexture1D.new()
+	_mountain_ramp_texture.gradient = gradient
+	_mountain_ramp_texture.width = 8
+	return _mountain_ramp_texture
 
 func _build_hover_mesh() -> MeshInstance3D:
 	var mesh_instance := MeshInstance3D.new()
